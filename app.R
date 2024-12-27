@@ -18,6 +18,8 @@ ui <- page_navbar(
     theme = bs_theme(version = 5),
     bg = "#0062cc",
     underline = TRUE,
+    
+    # Sidebar - read in data files and control options
     sidebar = sidebar(
         # elevation file
         fileInput("file.elevs", "Which file has elevation data?", 
@@ -34,7 +36,9 @@ ui <- page_navbar(
         fileInput("file.veg", "Which file has vegetation data?", 
                   multiple = FALSE,
                   accept = ".xlsx")
-    ),
+    ),  # end sidebar
+    
+    # Elevation data panel ----
     nav_panel("Elevations",
               
               navset_card_tab(
@@ -95,6 +99,8 @@ ui <- page_navbar(
                   )
               ) # end elevation navset_card_tabs
     ), # end elevation nav panel
+    
+    # Vegetation data panel ----
     nav_panel("Vegetation",
               navset_card_tab(
                   nav_panel(
@@ -103,11 +109,52 @@ ui <- page_navbar(
                       card(
                           DTOutput("dt.veg")
                       )
+                  ),
+                  nav_panel(
+                      title = "Vegetation time series",
+                      card(
+                          full_screen = TRUE,
+                          layout_columns(
+                              col_widths = c(3, 9),
+                              layout_column_wrap(
+                                  selectInput("selected_site.veg", "Select Site:", 
+                                              choices = NULL),
+                                  selectInput("selected_column.veg", "Select Column:", 
+                                              choices = NULL)
+                                  ),
+                              card(
+                                  layout_columns(
+                                      col_widths = c(10, 2),
+                                      checkboxGroupInput("selected_plots.veg", "Select Plot ID(s):",
+                                                         choices = NULL,
+                                                         inline = TRUE),
+                                      actionButton("uncheck_all.veg", "Uncheck All", 
+                                                   class = "btn-sm",
+                                                   style = "margin-top: 25px;")  # adjust margin to align with checkboxes
+                                  )
+                              )
+                              
+                          ),
+                          plotlyOutput("p_vegTimeSeries")
+                      )
+                  ),
+                  nav_panel(
+                      title = "Vegetation Transect Profiles",
+                      card(
+                          full_screen = TRUE,
+                          plotlyOutput("p_vegTransectProfile")
+                      )
                   )
-                  ) # end veg navset_card_tabs
+              ) # end veg navset_card_tabs
     ), # end veg nav panel
+    
+    
     nav_spacer(),
-    nav_item(tags$a(shiny::icon("github"), "Source Code", href = "https://github.com/swmpkim/WQBelevations", target = "_blank"))
+    nav_item(tags$a(shiny::icon("github"), 
+                    "Source Code", 
+                    href = "https://github.com/swmpkim/WQBelevations", 
+                    target = "_blank")
+             )
 ) # end UI
 
 # Server ----
@@ -133,10 +180,6 @@ server <- function(input, output, session){
     observe({
         req(elevs())  
         
-        # # year filtering
-        # dat_yrs <- sort(unique(elevs()$Year), decreasing = TRUE)  # Extract unique categories
-        # updateSelectInput(session, "yearsel", choices = dat_yrs)
-        # 
         # column selections
         nms <- names(elevs())
         # remove the date and site id columns from choice options
@@ -148,7 +191,7 @@ server <- function(input, output, session){
     })
     
     
-    # second observer to update elevAgvSel choices based on elevColSel choices
+    # observer to update elevAgvSel choices based on elevColSel choices
     observeEvent(input$elevColSel, {
         req(elevs()) 
         req(input$elevColSel)
@@ -165,7 +208,7 @@ server <- function(input, output, session){
                           # selected = if (input$elevAvgSel %in% c("none", avg_choices)) input$elevAvgSel else "none")
     })
     
-    # observer for site selection (time series)
+    # observer for site selection (elevation time series)
     observe({
         req(elev_renamed())
         updateSelectInput(session,
@@ -173,7 +216,7 @@ server <- function(input, output, session){
                           choices = unique(elev_renamed()$SiteID))
     })
     
-    # observer for plot selection (time series)
+    # observer for plot selection (elevation time series)
     observe({
         req(elev_renamed(), input$selected_site)
         updateCheckboxGroupInput(session,
@@ -182,11 +225,49 @@ server <- function(input, output, session){
                           selected = sort(unique(elev_renamed()$PlotID)))
     })
     
-    # observer for uncheck all button (time series)
+    # observer for uncheck all button (elevation time series)
     observeEvent(input$uncheck_all, {
         updateCheckboxGroupInput(session,
                                  "selected_plots",
                                  selected = character(0))  # empty selection
+    })
+    
+    
+    # observer for site selection (veg time series)
+    observe({
+        req(veg())
+        updateSelectInput(session,
+                          "selected_site.veg",
+                          choices = unique(veg()$SiteID))
+    })
+    
+    # observer for plot selection (veg time series)
+    observe({
+        req(veg(), input$selected_site.veg)
+        updateCheckboxGroupInput(session,
+                                 "selected_plots.veg",
+                                 choices = sort(unique(veg()$PlotID)),
+                                 selected = sort(unique(veg()$PlotID)))
+    })
+    
+    # observer for uncheck all button (veg time series)
+    observeEvent(input$uncheck_all.veg, {
+        updateCheckboxGroupInput(session,
+                                 "selected_plots.veg",
+                                 selected = character(0))  # empty selection
+    })
+    
+    # observer for column selection (veg time series)
+    observe({
+        req(veg())
+        
+        # only grab numeric columns
+        numeric_cols <- sapply(veg(), is.numeric)
+        cols.veg <- names(veg())[numeric_cols]
+        
+        updateSelectInput(session,
+                          "selected_column.veg",
+                          choices = cols.veg)
     })
     
     # more data framing ----
@@ -200,13 +281,6 @@ server <- function(input, output, session){
         
         # Check for duplicate selections
         if (anyDuplicated(input$elevColSel)) stop("Error: Duplicate columns selected.")
-        
-        # troubleshooting
-        # print("Column names in elevs():")
-        # print(names(df))
-        # print("Selected columns in elevColSel:")
-        # print(input$elevColSel)
-        
         
         # Check for duplicate column names in the data frame
         if (anyDuplicated(names(df))) {
@@ -349,6 +423,34 @@ server <- function(input, output, session){
         ggplotly(p)
     })
     
+    
+    output$p_vegTimeSeries <- renderPlotly({
+        req(veg(), input$selected_site.veg, input$selected_plots.veg, 
+            input$selected_column.veg)
+        cols <- khroma::color("batlow")(length(unique(veg()$PlotID)))
+        names(cols) <- sort(unique(veg()$PlotID))
+        tmp <- veg() |> 
+            filter(SiteID == input$selected_site.veg,
+                   PlotID %in% input$selected_plots.veg) |> 
+            rename("Selected" = input$selected_column.veg)
+        p <- ggplot(tmp,
+                aes(x = Year,
+                    y = Selected,
+                    col = as.factor(PlotID),
+                    group = PlotID)) +
+            geom_line() +
+            geom_point(size = 1.5) +
+            scale_color_manual(values = cols) +
+            facet_wrap(~TransectID) +
+            labs(y = input$selected_column.veg,
+                 col = "Plot ID") +
+            theme_bw() +
+            theme(legend.position = "bottom")
+        
+        ggplotly(p)
+    })
+    
+    
     # transect profile ----
     output$p_elevTransectProfile <- renderPlotly({
         p <- ggplot(elev_renamed(),
@@ -372,6 +474,35 @@ server <- function(input, output, session){
         
         ggplotly(p)
     })
+    
+    output$p_vegTransectProfile <- renderPlotly({
+        tmp <- veg() |> 
+            filter(SiteID == input$selected_site.veg,
+                   PlotID %in% input$selected_plots.veg) |> 
+            rename("Selected" = input$selected_column.veg)
+        p <- ggplot(tmp,
+                    aes(x = PlotID, y = Selected,
+                        group = Year,
+                        col = Year,
+                        fill = Year)) +
+            geom_point(size = 2,
+                       col = "gray30",
+                       shape = 21) +
+            geom_line() +
+            facet_grid(TransectID ~ SiteID, scales = "free_x") +
+            theme_bw() +
+            theme(panel.grid.major = element_line(linetype = "dashed"),
+                  panel.grid.minor = element_line(linetype = "blank")) + 
+            scale_color_nightfall(reverse = TRUE,
+                                  midpoint = mean(veg()$Year, na.rm = TRUE)) +
+            scale_fill_nightfall(reverse = TRUE,
+                                 midpoint = mean(veg()$Year, na.rm = TRUE)) +
+            labs(y = paste0(input$selected_column.veg, " Cover"))
+        
+        
+        ggplotly(p)
+    })
+    
 }
 
 # Run App ----
