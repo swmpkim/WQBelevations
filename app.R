@@ -107,7 +107,7 @@ ui <- page_navbar(
                   ) # end veg navset_card_tabs
     ), # end veg nav panel
     nav_spacer(),
-    nav_item(tags$a(shiny::icon("github"), "Shiny", href = "https://github.com/rstudio/shiny", target = "_blank"))
+    nav_item(tags$a(shiny::icon("github"), "Source Code", href = "https://github.com/swmpkim/WQBelevations", target = "_blank"))
 ) # end UI
 
 # Server ----
