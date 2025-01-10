@@ -276,6 +276,11 @@ server <- function(input, output, session){
         numeric_cols <- sapply(veg(), is.numeric)
         cols.veg <- names(veg())[numeric_cols]
         
+        # exclude any columns that come before the PlotID field (including PlotID)
+        col.cutoff <- which(names(veg()) == "PlotID")
+        cols.exclude <- names(veg())[1:col.cutoff]
+        cols.veg <- cols.veg[!(cols.veg %in% cols.exclude)]
+        
         updateSelectInput(session,
                           "selected_column.veg",
                           choices = cols.veg)
