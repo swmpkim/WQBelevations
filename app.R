@@ -102,7 +102,26 @@ ui <- page_navbar(
     
     # Vegetation data panel ----
     nav_panel("Vegetation",
-              navset_card_tab(
+              layout_sidebar(
+                  sidebar = sidebar(
+                      selectInput("selected_site.veg", "Select Site:", 
+                                  choices = NULL),
+                      selectInput("selected_column.veg", "Select Column:", 
+                                  choices = NULL)
+                  ),
+              
+              navset_tab(
+                  # header = div(
+                  #     class = "bg-light p-3",
+                  #     layout_columns(
+                  #         col_widths = c(3, 3, 6),
+                  #             selectInput("selected_site.veg", "Select Site:", 
+                  #                         choices = NULL),
+                  #             selectInput("selected_column.veg", "Select Column:", 
+                  #                         choices = NULL)
+                  #     )
+                  # ),  # Close the header div
+                  # Start the nav_panels inside navset_tab
                   nav_panel(
                       title = "Vegetation Data preview",
                       p("These tables are interactive. It is a good idea to sort by various columns to make sure you don't have any anomalous values."),
@@ -114,26 +133,16 @@ ui <- page_navbar(
                       title = "Vegetation time series",
                       card(
                           full_screen = TRUE,
-                          layout_columns(
-                              col_widths = c(3, 9),
-                              layout_column_wrap(
-                                  selectInput("selected_site.veg", "Select Site:", 
-                                              choices = NULL),
-                                  selectInput("selected_column.veg", "Select Column:", 
-                                              choices = NULL)
-                                  ),
-                              card(
-                                  layout_columns(
-                                      col_widths = c(10, 2),
-                                      checkboxGroupInput("selected_plots.veg", "Select Plot ID(s):",
-                                                         choices = NULL,
-                                                         inline = TRUE),
-                                      actionButton("uncheck_all.veg", "Uncheck All", 
-                                                   class = "btn-sm",
-                                                   style = "margin-top: 25px;")  # adjust margin to align with checkboxes
-                                  )
+                          card(
+                              layout_columns(
+                                  col_widths = c(10, 2),
+                                  checkboxGroupInput("selected_plots.veg", "Select Plot ID(s):",
+                                                     choices = NULL,
+                                                     inline = TRUE),
+                                  actionButton("uncheck_all.veg", "Uncheck All", 
+                                               class = "btn-sm",
+                                               style = "margin-top: 25px;")
                               )
-                              
                           ),
                           plotlyOutput("p_vegTimeSeries")
                       )
@@ -142,11 +151,23 @@ ui <- page_navbar(
                       title = "Vegetation Transect Profiles",
                       card(
                           full_screen = TRUE,
+                          card(
+                              layout_columns(
+                                  col_widths = c(10, 2),
+                                  checkboxGroupInput("selected_years.veg", "Select Year(s):",
+                                                     choices = NULL,
+                                                     inline = TRUE),
+                                  actionButton("uncheck_all_years.veg", "Uncheck All", 
+                                               class = "btn-sm",
+                                               style = "margin-top: 25px;")
+                              )
+                          ),
                           plotlyOutput("p_vegTransectProfile")
                       )
                   )
-              ) # end veg navset_card_tabs
-    ), # end veg nav panel
+              ) # end navset_tab
+              ) # end layout_sidebar
+    ), # end nav_panel
     
     
     nav_spacer(),
@@ -250,7 +271,7 @@ server <- function(input, output, session){
                                  selected = sort(unique(veg()$PlotID)))
     })
     
-    # observer for uncheck all button (veg time series)
+    # observer for uncheck all button (veg time series - plots)
     observeEvent(input$uncheck_all.veg, {
         updateCheckboxGroupInput(session,
                                  "selected_plots.veg",
@@ -268,6 +289,23 @@ server <- function(input, output, session){
         updateSelectInput(session,
                           "selected_column.veg",
                           choices = cols.veg)
+    })
+    
+# observer for year selection (veg transect profiles)
+    observe({
+        req(veg(), input$selected_site.veg)
+        updateCheckboxGroupInput(session,
+                                 "selected_years.veg",
+                                 choices = sort(unique(veg()$Year)),
+                                 selected = sort(unique(veg()$Year)))
+    })
+    
+    
+    # observer for uncheck all button (veg transect profiles - years)
+    observeEvent(input$uncheck_all_years.veg, {
+        updateCheckboxGroupInput(session,
+                                 "selected_years.veg",
+                                 selected = character(0))  # empty selection
     })
     
     # more data framing ----
