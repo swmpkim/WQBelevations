@@ -111,17 +111,7 @@ ui <- page_navbar(
                   ),
               
               navset_tab(
-                  # header = div(
-                  #     class = "bg-light p-3",
-                  #     layout_columns(
-                  #         col_widths = c(3, 3, 6),
-                  #             selectInput("selected_site.veg", "Select Site:", 
-                  #                         choices = NULL),
-                  #             selectInput("selected_column.veg", "Select Column:", 
-                  #                         choices = NULL)
-                  #     )
-                  # ),  # Close the header div
-                  # Start the nav_panels inside navset_tab
+                  
                   nav_panel(
                       title = "Vegetation Data preview",
                       p("These tables are interactive. It is a good idea to sort by various columns to make sure you don't have any anomalous values."),
@@ -489,7 +479,8 @@ server <- function(input, output, session){
     })
     
     
-    # transect profile ----
+    # transect profiles ----
+    # elevation
     output$p_elevTransectProfile <- renderPlotly({
         p <- ggplot(elev_renamed(),
                     aes(x = PlotID, y = elev_mean,
@@ -513,10 +504,12 @@ server <- function(input, output, session){
         ggplotly(p)
     })
     
+    # veg
     output$p_vegTransectProfile <- renderPlotly({
+        req(veg(), input$selected_site.veg, input$selected_years.veg)
         tmp <- veg() |> 
             filter(SiteID == input$selected_site.veg,
-                   PlotID %in% input$selected_plots.veg) |> 
+                   Year %in% input$selected_years.veg) |> 
             rename("Selected" = input$selected_column.veg)
         p <- ggplot(tmp,
                     aes(x = PlotID, y = Selected,
