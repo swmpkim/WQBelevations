@@ -21,6 +21,7 @@ ui <- page_navbar(
     
     # Sidebar - read in data files and control options
     sidebar = sidebar(
+        title = "File Inputs",
         # elevation file
         fileInput("file.elevs", "Which file has elevation data?", 
                   multiple = FALSE,
@@ -40,8 +41,13 @@ ui <- page_navbar(
     
     # Elevation data panel ----
     nav_panel("Elevations",
-              
-              navset_card_tab(
+              layout_sidebar(
+                  sidebar = sidebar(
+                      title = "Choices for Time Series and Transect Profile tabs",
+                      selectInput("selected_site", "Select Site:", 
+                                  choices = NULL)
+                  ),
+              navset_tab(
                   nav_panel(
                       title = "Elevation data preview",
                       p("These tables are interactive. It is a good idea to sort by various columns to make sure you don't have any anomalous values."),
@@ -71,8 +77,6 @@ ui <- page_navbar(
                           layout_columns(
                               col_widths = c(3, 9),
                               layout_column_wrap(
-                                  selectInput("selected_site", "Select Site:", 
-                                              choices = NULL),
                                   checkboxInput("show_errorbars", "Show error bars", value = TRUE)),
                               card(
                                   layout_columns(
@@ -91,19 +95,33 @@ ui <- page_navbar(
                       )
                   ),
                   nav_panel(
-                      title = "Transect Profiles",
+                      title = "Elevation Transect Profiles",
                       card(
                           full_screen = TRUE,
+                          card(
+                              layout_columns(
+                                  col_widths = c(10, 2),
+                                  checkboxGroupInput("selected_years.elev", "Select Year(s):",
+                                                     choices = NULL,
+                                                     inline = TRUE),
+                                  actionButton("uncheck_all_years.elev", "Uncheck All", 
+                                               class = "btn-sm",
+                                               style = "margin-top: 25px;")
+                              )
+                          ),
                           plotlyOutput("p_elevTransectProfile")
                       )
                   )
+                  
               ) # end elevation navset_card_tabs
+              ) # end sidebar layout
     ), # end elevation nav panel
     
     # Vegetation data panel ----
     nav_panel("Vegetation",
               layout_sidebar(
                   sidebar = sidebar(
+                      title = "Choices for Time Series and Transect Profile tabs",
                       selectInput("selected_site.veg", "Select Site:", 
                                   choices = NULL),
                       selectInput("selected_column.veg", "Select Column:", 
@@ -186,6 +204,64 @@ server <- function(input, output, session){
                           sheet = "Cover")
     })
     
+    # more data framing ----
+    
+    # rename and subset elevations
+    elev_renamed <- reactive({
+        req(elevs(), input$elevColSel, input$elevAvgSel)
+        
+        df <- elevs()
+        names(df) <- make.names(names(df), unique = TRUE)  # Ensure unique names
+        
+        # Check for duplicate selections
+        if (anyDuplicated(input$elevColSel)) stop("Error: Duplicate columns selected.")
+        
+        # Check for duplicate column names in the data frame
+        if (anyDuplicated(names(df))) {
+            stop("Error: Duplicate column names exist in the data frame.")
+        }
+        
+        # Proceed with renaming
+        new_names <- paste0("elevation", seq_along(input$elevColSel))
+        # print("New names:")
+        # print(new_names)
+        indices <- which(names(df) %in% input$elevColSel)
+        if (length(indices) != length(input$elevColSel)) stop("Error: Column mismatch.")
+        names(df)[indices] <- new_names
+        # print("Updated column names:")
+        # print(names(df))
+        # 
+        
+        if(input$elevAvgSel != "none"){
+            names(df)[names(df) == input$elevAvgSel] <- "elev_avg_fromCSV"
+        }
+        
+        df <- df |> 
+            dplyr::select(Year, Month, Day,
+                          Date,
+                          PlotIdFull,
+                          SiteID, 
+                          TransectID, 
+                          PlotID,
+                          starts_with("elev")) |> 
+            dplyr::rowwise() |> 
+            dplyr::mutate(elev_mean = mean(c_across(starts_with("elevation")), na.rm = TRUE),
+                          elev_sd = sd(c_across(starts_with("elevation")), na.rm = TRUE)) |> 
+            dplyr::ungroup() |> 
+            dplyr::relocate(c(elev_mean, elev_sd),
+                            .after = PlotIdFull)
+    })
+    
+    # pivot elevations
+    elev_long <- reactive({
+        elev_renamed() |> 
+            tidyr::pivot_longer(cols = all_of(starts_with("elevation")),
+                                names_to = "rep",
+                                values_to = "value")
+    })
+    
+    
+    
     # observers ----
     # Observe when the elevs data frame changes and update selection choices
     observe({
@@ -240,6 +316,23 @@ server <- function(input, output, session){
     observeEvent(input$uncheck_all, {
         updateCheckboxGroupInput(session,
                                  "selected_plots",
+                                 selected = character(0))  # empty selection
+    })
+    
+    # observer for year selection (elev transect profiles)
+    observe({
+        req(elev_renamed(), input$selected_site)
+        updateCheckboxGroupInput(session,
+                                 "selected_years.elev",
+                                 choices = sort(unique(elev_renamed()$Year)),
+                                 selected = sort(unique(elev_renamed()$Year)))
+    })
+    
+    
+    # observer for uncheck all button (elev transect profiles - years)
+    observeEvent(input$uncheck_all_years.elev, {
+        updateCheckboxGroupInput(session,
+                                 "selected_years.elev",
                                  selected = character(0))  # empty selection
     })
     
@@ -301,62 +394,6 @@ server <- function(input, output, session){
         updateCheckboxGroupInput(session,
                                  "selected_years.veg",
                                  selected = character(0))  # empty selection
-    })
-    
-    # more data framing ----
-    
-    # rename and subset elevations
-    elev_renamed <- reactive({
-      req(elevs(), input$elevColSel, input$elevAvgSel)
-        
-        df <- elevs()
-        names(df) <- make.names(names(df), unique = TRUE)  # Ensure unique names
-        
-        # Check for duplicate selections
-        if (anyDuplicated(input$elevColSel)) stop("Error: Duplicate columns selected.")
-        
-        # Check for duplicate column names in the data frame
-        if (anyDuplicated(names(df))) {
-            stop("Error: Duplicate column names exist in the data frame.")
-        }
-        
-        # Proceed with renaming
-        new_names <- paste0("elevation", seq_along(input$elevColSel))
-        # print("New names:")
-        # print(new_names)
-        indices <- which(names(df) %in% input$elevColSel)
-        if (length(indices) != length(input$elevColSel)) stop("Error: Column mismatch.")
-        names(df)[indices] <- new_names
-        # print("Updated column names:")
-        # print(names(df))
-        # 
-        
-        if(input$elevAvgSel != "none"){
-            names(df)[names(df) == input$elevAvgSel] <- "elev_avg_fromCSV"
-        }
-        
-        df <- df |> 
-            dplyr::select(Year, Month, Day,
-                          Date,
-                          PlotIdFull,
-                          SiteID, 
-                          TransectID, 
-                          PlotID,
-                          starts_with("elev")) |> 
-            dplyr::rowwise() |> 
-            dplyr::mutate(elev_mean = mean(c_across(starts_with("elevation")), na.rm = TRUE),
-                          elev_sd = sd(c_across(starts_with("elevation")), na.rm = TRUE)) |> 
-            dplyr::ungroup() |> 
-            dplyr::relocate(c(elev_mean, elev_sd),
-                            .after = PlotIdFull)
-    })
-    
-    # pivot elevations
-    elev_long <- reactive({
-        elev_renamed() |> 
-            tidyr::pivot_longer(cols = all_of(starts_with("elevation")),
-                                names_to = "rep",
-                                values_to = "value")
     })
     
     
@@ -487,7 +524,13 @@ server <- function(input, output, session){
     # transect profiles ----
     # elevation
     output$p_elevTransectProfile <- renderPlotly({
-        p <- ggplot(elev_renamed(),
+        req(elev_renamed(), input$selected_site, input$selected_years.elev)
+        
+        tmp <- elev_renamed() |> 
+            filter(SiteID == input$selected_site,
+                   Year %in% input$selected_years.elev)
+        
+        p <- ggplot(tmp,
                     aes(x = PlotID, y = elev_mean,
                         group = Year,
                         col = Year,
