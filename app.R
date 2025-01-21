@@ -98,6 +98,10 @@ ui <- page_navbar(
                       title = "Elevation Transect Profiles",
                       card(
                           full_screen = TRUE,
+                          layout_columns(
+                              col_widths = c(3, 9),
+                              layout_column_wrap(
+                                  checkboxInput("show_errorbars_elevProfile", "Show error bars", value = FALSE)),
                           card(
                               layout_columns(
                                   col_widths = c(10, 2),
@@ -108,6 +112,7 @@ ui <- page_navbar(
                                                class = "btn-sm",
                                                style = "margin-top: 25px;")
                               )
+                          )
                           ),
                           plotlyOutput("p_elevTransectProfile")
                       )
@@ -177,6 +182,74 @@ ui <- page_navbar(
               ) # end layout_sidebar
     ), # end nav_panel
     
+    # Combined data panel ----
+    nav_panel("Combined",
+              layout_sidebar(
+                  sidebar = sidebar(
+                      title = "Choices for Time Series and Transect Profile tabs",
+                      selectInput("selected_site.comb", "Select Site:", 
+                                  choices = NULL),
+                      selectInput("selected_cols.comb", "Select focal columns from veg data:",
+                                  choices = NULL,
+                                  multiple = TRUE)
+                  ),
+                  
+                  navset_tab(
+                      
+                      nav_panel(
+                          title = "Combined Data preview",
+                          p("These tables are interactive. It is a good idea to sort by various columns to make sure you don't have any anomalous values."),
+                          card(
+                              DTOutput("dt.comb")
+                          )
+                      ),
+                      nav_panel(
+                          title = "Combined time series",
+                          card(
+                              full_screen = TRUE,
+                              fill = FALSE,
+                              p("Plot selection option is below the graph panels."),
+                              
+                              plotlyOutput("p_combTimeSeries",
+                                           height = "600px"),
+                              card(
+                                  layout_columns(
+                                      col_widths = c(10, 2),
+                                      checkboxGroupInput("selected_plots.comb", "Select Plot ID(s):",
+                                                         choices = NULL,
+                                                         inline = TRUE),
+                                      actionButton("uncheck_all.comb", "Uncheck All", 
+                                                   class = "btn-sm",
+                                                   style = "margin-top: 25px;")
+                                  )
+                              )
+                          )
+                      ),
+                      nav_panel(
+                          title = "Combined Transect Profiles",
+                          card(
+                              full_screen = TRUE,
+                              fill = FALSE,
+                              p("Year selection option is below the graph panels."),
+                              plotlyOutput("p_combTransectProfile",
+                                           height = "600px"),
+                              card(
+                                  layout_columns(
+                                      col_widths = c(10, 2),
+                                      checkboxGroupInput("selected_years.comb", "Select Year(s):",
+                                                         choices = NULL,
+                                                         inline = TRUE),
+                                      actionButton("uncheck_all_years.comb", "Uncheck All", 
+                                                   class = "btn-sm",
+                                                   style = "margin-top: 25px;")
+                                  )
+                              )
+                          )
+                      )
+                  ) # end navset_tab
+              ) # end layout_sidebar
+    ), # end nav_panel
+    
     
     nav_spacer(),
     nav_item(tags$a(shiny::icon("github"), 
@@ -202,6 +275,15 @@ server <- function(input, output, session){
         req(input$file.veg)
         readxl::read_xlsx(input$file.veg$datapath,
                           sheet = "Cover")
+    })
+    
+    comb <- reactive({
+        req(input$file.elevs, input$file.veg, elev_renamed())
+        veg2 <- veg() |> 
+            mutate(PlotIdFull = paste(SiteID, TransectID, PlotID, sep = "-")) |> 
+            relocate(PlotIdFull) 
+        full_join(veg2, elev_renamed(),
+                  by = c("Year", "PlotIdFull", "SiteID", "TransectID", "PlotID"))
     })
     
     # more data framing ----
@@ -258,6 +340,30 @@ server <- function(input, output, session){
             tidyr::pivot_longer(cols = all_of(starts_with("elevation")),
                                 names_to = "rep",
                                 values_to = "value")
+    })
+    
+    
+    # subset combined data frame to focal species + elevations
+    comb_subset <- reactive({
+        req(comb(), input$selected_cols.comb)
+        comb()  |> 
+            dplyr::select(PlotIdFull,
+                          SiteID, TransectID, PlotID,
+                          Year, 
+                          elev_mean, elev_sd,
+                          any_of(input$selected_cols.comb))
+    })
+    
+    # pivot combined
+    comb_long <- reactive({
+        req(comb_subset())
+        comb_subset() |> 
+            tidyr::pivot_longer(-(PlotIdFull:Year),
+                         names_to = "Measurement",
+                         values_to = "Value") |> 
+            mutate(Measurement = forcats::fct_relevel(Measurement,
+                                                      c("elev_mean", "elev_sd"),
+                                                      after = Inf))
     })
     
     
@@ -397,6 +503,68 @@ server <- function(input, output, session){
     })
     
     
+    # observer for site selection (combined time series)
+    observe({
+        req(comb())
+        updateSelectInput(session,
+                          "selected_site.comb",
+                          choices = unique(comb()$SiteID))
+    })
+    
+    # observer for plot selection (combined time series)
+    observe({
+        req(comb(), input$selected_site.comb)
+        updateCheckboxGroupInput(session,
+                                 "selected_plots.comb",
+                                 choices = sort(unique(comb()$PlotID)),
+                                 selected = sort(unique(comb()$PlotID)))
+    })
+    
+    # observer for column selection (combined graphics)
+    observe({
+        req(comb())
+        
+        # only grab numeric columns
+        numeric_cols <- sapply(comb(), is.numeric)
+        cols.comb <- names(comb())[numeric_cols]
+        
+        # exclude any that start with 'elev'; these will be included always
+        cols.comb <- cols.comb[which(!stringr::str_starts(cols.comb, "elev"))]
+        
+        # exclude any columns that come before the PlotID field (including PlotID)
+        col.cutoff <- which(cols.comb == "PlotID")
+        cols.comb <- cols.comb[(col.cutoff + 1):length(cols.comb)]
+        
+        updateSelectInput(session,
+                          "selected_cols.comb",
+                          choices = cols.comb)
+    })
+    
+    # observer for uncheck all button (combined time series)
+    observeEvent(input$uncheck_all.comb, {
+        updateCheckboxGroupInput(session,
+                                 "selected_plots.comb",
+                                 selected = character(0))  # empty selection
+    })
+    
+    # observer for year selection (combined transect profiles)
+    observe({
+        req(comb(), input$selected_site.comb)
+        updateCheckboxGroupInput(session,
+                                 "selected_years.comb",
+                                 choices = sort(unique(comb()$Year)),
+                                 selected = sort(unique(comb()$Year)))
+    })
+    
+    
+    # observer for uncheck all button (combined transect profiles - years)
+    observeEvent(input$uncheck_all_years.comb, {
+        updateCheckboxGroupInput(session,
+                                 "selected_years.comb",
+                                 selected = character(0))  # empty selection
+    })
+    
+    
     # tables ----
     output$dt.elevs <- renderDT({
         tmp <- elev_renamed() |> 
@@ -419,6 +587,10 @@ server <- function(input, output, session){
     
     output$dt.veg <- renderDT({
         DT::datatable(veg())
+    })
+    
+    output$dt.comb <- renderDT({
+        DT::datatable(comb_subset())
     })
     
     
@@ -493,7 +665,7 @@ server <- function(input, output, session){
         ggplotly(p)
     })
     
-    
+    # veg time series
     output$p_vegTimeSeries <- renderPlotly({
         req(veg(), input$selected_site.veg, input$selected_plots.veg, 
             input$selected_column.veg)
@@ -514,6 +686,30 @@ server <- function(input, output, session){
             facet_wrap(~TransectID) +
             labs(y = input$selected_column.veg,
                  col = "Plot ID") +
+            theme_bw() +
+            theme(legend.position = "bottom")
+        
+        ggplotly(p)
+    })
+    
+    # combined elev + veg time series
+    output$p_combTimeSeries <- renderPlotly({
+        req(comb_long(), input$selected_site.comb, input$selected_plots.comb)
+        cols <- khroma::color("batlow")(length(unique(comb_long()$PlotID)))
+        names(cols) <- sort(unique(comb_long()$PlotID))
+        p <- comb_long() |> 
+            filter(SiteID == input$selected_site.comb,
+                   PlotID %in% input$selected_plots.comb) |> 
+            ggplot(
+                aes(x = Year,
+                    y = Value,
+                    col = as.factor(PlotID),
+                    group = PlotID)) +
+            geom_line() +
+            geom_point(size = 1.5) +
+            scale_color_manual(values = cols) +
+            facet_grid(Measurement ~ TransectID, scales = "free_y") +
+            labs(col = "Plot ID") +
             theme_bw() +
             theme(legend.position = "bottom")
         
@@ -548,6 +744,11 @@ server <- function(input, output, session){
             scale_fill_nightfall(reverse = TRUE,
                                  midpoint = mean(elev_renamed()$Year, na.rm = TRUE))
         
+        # Add error bars if checkbox is checked
+        if(input$show_errorbars_elevProfile) {
+            p <- p + geom_linerange(aes(ymin = elev_mean - elev_sd,
+                                        ymax = elev_mean + elev_sd))
+        }
         
         ggplotly(p)
     })
@@ -578,6 +779,68 @@ server <- function(input, output, session){
                                  midpoint = mean(veg()$Year, na.rm = TRUE)) +
             labs(y = paste0(input$selected_column.veg, " Cover"))
         
+        
+        ggplotly(p)
+    })
+    
+    
+    # combined
+    # NEEDS SOME LOVE - can probably do interpolating elsewhere
+    output$p_combTransectProfile <- renderPlotly({
+        req(comb_subset(),
+            input$selected_site.comb, input$selected_years.comb,
+            input$selected_cols.comb)
+        
+        tmp <- comb_subset() |> 
+            arrange(PlotIdFull, Year) |> 
+            group_by(PlotIdFull) |> 
+            complete(Year = full_seq(Year, 1)) |> 
+            tidyr::separate(PlotIdFull, into = c("Site2", "Transect2", "Plot2"),
+                            sep = "-", remove = FALSE) |> 
+            mutate(elev_interp = zoo::na.approx(elev_mean, Year, na.rm = FALSE),
+                   SiteID = case_when(is.na(SiteID) ~ Site2,
+                                      .default = SiteID),
+                   TransectID = case_when(is.na(TransectID) ~ Transect2,
+                                          .default = TransectID),
+                   PlotID = case_when(is.na(PlotID) ~ as.numeric(Plot2),
+                                      .default = PlotID)) |> 
+            select(-Site2, -Transect2, -Plot2) |> 
+            filter(Year %in% input$selected_years.comb,
+                   SiteID  == input$selected_site.comb)
+        
+        tmp2 <- tmp |> 
+            pivot_longer(cols = any_of(input$selected_cols.comb),
+                         names_to = "Species",
+                         values_to = "Cover")
+        
+        p <- ggplot(tmp,
+                    aes(x = PlotID, y = elev_mean,
+                        group = Year,
+                        col = Year,
+                        fill = Year)) +
+            geom_point(size = 0.7,
+                       col = "gray30",
+                       shape = 21) +
+            geom_line() +
+            geom_point(data = tmp2,
+                       aes(size = Cover,
+                           shape = Species,
+                           y = elev_interp),
+                       alpha = 0.6) +
+            geom_line(data = tmp2,
+                       aes(y = elev_interp),
+                      linetype = "dashed",
+                       alpha = 0.6) +
+            facet_grid(TransectID ~ SiteID, scales = "free_x") +
+            theme_bw() +
+            theme(panel.grid.major = element_line(linetype = "dashed"),
+                  panel.grid.minor = element_line(linetype = "blank")) + 
+            scale_color_nightfall(reverse = TRUE,
+                                  midpoint = mean(comb_subset()$Year, na.rm = TRUE)) +
+            scale_fill_nightfall(reverse = TRUE,
+                                 midpoint = mean(comb_subset()$Year, na.rm = TRUE)) +
+            labs(y = "mean plot elevation (may be interpolated)",
+                 shape = "Species or cover")
         
         ggplotly(p)
     })

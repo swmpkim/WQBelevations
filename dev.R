@@ -5,7 +5,7 @@ library(plotly)
 
 # inputs ----
 input.elev <- here::here("VegPlotElevationsAllYearsAllPlots.csv")
-input.veg <- here::here("WQB_veg.xlsx")
+input.veg <- here::here("WQB_veg - Copy.xlsx")
 input.elevColSel <- c("X1..LW.Left..m.NAVD88",
                       "X2..LW.Right..m.NAVD88",
                       "X3..SW.Right..m.NAVD88",
@@ -54,6 +54,127 @@ elev_long <- elev_renamed |>
     tidyr::pivot_longer(cols = all_of(starts_with("elevation")),
                         names_to = "rep",
                         values_to = "value")
+
+# binding data frames together ----
+# deal with elevation df
+elev_renamed2 <- elev_renamed |> 
+    rename(Date_elevation = Date) |> 
+    select(-Month, -Day)
+if(exists("elev_avg_fromCSV", elev_renamed2)){
+    elev_renamed2$elev_avg_fromCSV <- NULL
+}
+# deal with veg df
+veg2 <- veg |> 
+    mutate(PlotIdFull = paste(SiteID, TransectID, PlotID, sep = "-")) |> 
+    relocate(PlotIdFull) 
+
+vegAndElev <- full_join(veg2, elev_renamed2,
+                        by = c("Year", "PlotIdFull", "SiteID", "TransectID", "PlotID"))
+
+test <- anti_join(elev_renamed2, veg2,
+                  by = c("Year", "PlotIdFull"))
+
+vegAndElev2 <- vegAndElev |> 
+    rowwise() |> 
+    mutate(sumFs = sum(!is.na(c_across(starts_with("F_")))))
+
+# time series of elevation and algae/wrack?
+ts_test <- vegAndElev2 |> 
+    select(PlotIdFull:Total, SiteID, TransectID, PlotID,
+           Bare, Dead, Wrack, Water, Algae,
+           sumFs, starts_with("elev"))
+ts_long <- ts_test |> 
+    pivot_longer(c(Bare, Dead, Wrack, Water, Algae, elev_mean, elev_sd),
+                 names_to = "Measurement",
+                 values_to = "Value")
+
+ts_long |> 
+    filter(Measurement %in% c("Wrack", "Algae", "elev_mean", "elev_sd")) |> 
+    ggplot(aes(x = Year, y = Value, group = PlotIdFull, col = PlotID, shape = TransectID)) +
+    geom_point() +
+    geom_line() +
+    facet_grid(Measurement ~ SiteID, scales = "free_y")
+
+# or choose a site and facet by transect
+ts_long |> 
+    filter(Measurement %in% c("Wrack", "Algae", "Bare", "elev_mean", "elev_sd"),
+           SiteID == "S2") |> 
+    ggplot(aes(x = Year, y = Value, group = PlotIdFull, col = PlotID, fill = PlotID)) +
+    geom_point(size = 2,
+               col = "gray30",
+               shape = 21) +
+    geom_line() +
+    khroma::scale_color_nightfall(reverse = TRUE, midpoint = 7) +
+    khroma::scale_fill_nightfall(reverse = TRUE, midpoint = 7) +
+    facet_grid(Measurement ~ TransectID, scales = "free_y") +
+    theme_bw()
+
+# correlations b/t elevation and algae/wrack? what about lags,
+# or when there aren't readings of one or the other?
+library(naniar)
+ggplot(ts_test,
+       aes(x = Wrack,
+           y = Algae)) +
+    geom_miss_point()
+
+ts_test2 <- ts_test |> 
+    mutate(across(c(Bare, Dead, Wrack, Water, Algae),
+                  function(x) ifelse(is.na(x), 0, x)))
+ggplot(ts_test2,
+       aes(x = Wrack,
+           y = Algae)) +
+    geom_point(size = 3, alpha = 0.3)
+
+ggplot(ts_test2,
+       aes(x = Algae,
+           y = elev_mean)) +
+    geom_point(size = 3, alpha = 0.3)
+
+ggplot(ts_test2,
+       aes(x = Wrack,
+           y = elev_mean)) +
+    geom_point(size = 3, alpha = 0.3)
+
+ggplot(ts_test2,
+       aes(x = Bare,
+           y = elev_mean)) +
+    geom_point(size = 3, alpha = 0.3)
+
+ggplot(ts_test2,
+       aes(x = Bare,
+           y = elev_sd)) +
+    geom_point(size = 3, alpha = 0.3)
+
+ggplot(ts_test2,
+       aes(x = Algae,
+           y = elev_sd)) +
+    geom_point(size = 3, alpha = 0.3)
+
+ggplot(ts_test2,
+       aes(x = Wrack,
+           y = elev_sd)) +
+    geom_point(size = 3, alpha = 0.3)
+
+ts_test3 <- ts_test2 |>
+    ungroup() |> 
+    select(PlotIdFull:Algae,
+           elev_mean, elev_sd) |> 
+    mutate(elev_sd = case_when(is.na(elev_sd) ~ 0,
+                               .default = elev_sd)) |>
+    mutate(across(c(Total, Bare, Dead, Wrack, Water, Algae, elev_mean, elev_sd),
+           function(x) as.vector(scale(x)))) |> 
+    mutate(across(c(Total:elev_sd),
+           function(x) ifelse(is.na(x), 0, x)))
+
+pca_test <- princomp(ts_test3[, c(18:24)])
+screeplot(pca_test, type = "l")
+summary(pca_test)
+
+biplot(pca_test,
+       cex = c(0.5, 1),
+       col = c("gray40", "darkred"))
+
+
 
 # tables ----
 
