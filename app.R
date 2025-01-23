@@ -7,6 +7,8 @@ library(naniar)
 library(khroma)
 library(plotly)
 library(DT)
+library(reactable)
+
 
 # to-dos
 # make table of # plots per transect by sample year
@@ -48,11 +50,11 @@ ui <- page_navbar(
                       selectInput("selected_site", "Select Site:", 
                                   choices = NULL)
                   ),
-              navset_tab(
+              navset_card_tab(
                   nav_panel(
                       title = "Elevation data preview",
-                      p("These tables are interactive. It is a good idea to sort by various columns to make sure you don't have any anomalous values."),
-                      DTOutput("dt.elevs", height = "450px")
+                      htmltools::tags$small("This table is interactive. Columns can be sorted by clicking on their name, or filtered by typing into the box below the name. The entire table is searchable via the box at its upper right."),
+                      reactableOutput("dt.elevs")
                   ),
                   nav_panel(
                       title = "Elevation histograms",
@@ -134,14 +136,12 @@ ui <- page_navbar(
                                   choices = NULL)
                   ),
               
-              navset_tab(
+              navset_card_tab(
                   
                   nav_panel(
                       title = "Vegetation Data preview",
-                      p("These tables are interactive. It is a good idea to sort by various columns to make sure you don't have any anomalous values."),
-                      card(
-                          DTOutput("dt.veg")
-                      )
+                      htmltools::tags$small("This table is interactive. Columns can be sorted by clicking on their name, or filtered by typing into the box below the name. The entire table is searchable via the box at its upper right."),
+                      reactableOutput("dt.veg")
                   ),
                   nav_panel(
                       title = "Vegetation time series",
@@ -195,14 +195,12 @@ ui <- page_navbar(
                                   multiple = TRUE)
                   ),
                   
-                  navset_tab(
+                  navset_card_tab(
                       
                       nav_panel(
                           title = "Combined Data preview",
-                          p("These tables are interactive. It is a good idea to sort by various columns to make sure you don't have any anomalous values."),
-                          card(
-                              DTOutput("dt.comb")
-                          )
+                          htmltools::tags$small("This table is interactive. Columns can be sorted by clicking on their name, or filtered by typing into the box below the name. The entire table is searchable via the box at its upper right."),
+                          reactableOutput("dt.comb")
                       ),
                       nav_panel(
                           title = "Combined time series",
@@ -300,22 +298,22 @@ server <- function(input, output, session){
         req(input$file.elevs)
         df <- read.csv(input$file.elevs$datapath)
         df |>
-            mutate(Date = lubridate::ymd(paste(Year, Month, Day)),
-                   PlotIdFull = paste(SiteID, TransectID, PlotID, sep = "-"))
+            mutate(Date.Elevation = lubridate::ymd(paste(Year, Month, Day)),
+                   PlotIdFull = paste(SiteID, TransectID, PlotID, sep = "-")) |> 
+            select(-Month, -Day)
     })
     
     veg <- reactive({
         req(input$file.veg)
         readxl::read_xlsx(input$file.veg$datapath,
-                          sheet = "Cover")
+                          sheet = "Cover") |> 
+            mutate(PlotIdFull = paste(SiteID, TransectID, PlotID, sep = "-")) |> 
+            relocate(PlotIdFull)
     })
     
     comb <- reactive({
-        req(input$file.elevs, input$file.veg, elev_renamed())
-        veg2 <- veg() |> 
-            mutate(PlotIdFull = paste(SiteID, TransectID, PlotID, sep = "-")) |> 
-            relocate(PlotIdFull) 
-        full_join(veg2, elev_renamed(),
+        req(veg(), elev_renamed())
+        full_join(veg(), elev_renamed(),
                   by = c("Year", "PlotIdFull", "SiteID", "TransectID", "PlotID"))
     })
     
@@ -338,30 +336,26 @@ server <- function(input, output, session){
         
         # Proceed with renaming
         new_names <- paste0("elevation", seq_along(input$elevColSel))
-        # print("New names:")
-        # print(new_names)
+
         indices <- which(names(df) %in% input$elevColSel)
         if (length(indices) != length(input$elevColSel)) stop("Error: Column mismatch.")
         names(df)[indices] <- new_names
-        # print("Updated column names:")
-        # print(names(df))
-        # 
         
         if(input$elevAvgSel != "none"){
             names(df)[names(df) == input$elevAvgSel] <- "elev_avg_fromCSV"
         }
         
         df <- df |> 
-            dplyr::select(Year, Month, Day,
-                          Date,
+            dplyr::select(Year, 
+                          Date.Elevation,
                           PlotIdFull,
                           SiteID, 
                           TransectID, 
                           PlotID,
                           starts_with("elev")) |> 
             dplyr::rowwise() |> 
-            dplyr::mutate(elev_mean = mean(c_across(starts_with("elevation")), na.rm = TRUE),
-                          elev_sd = sd(c_across(starts_with("elevation")), na.rm = TRUE)) |> 
+            dplyr::mutate(elev_mean = round(mean(c_across(starts_with("elevation")), na.rm = TRUE), 4),
+                          elev_sd = round(sd(c_across(starts_with("elevation")), na.rm = TRUE), 4)) |> 
             dplyr::ungroup() |> 
             dplyr::relocate(c(elev_mean, elev_sd),
                             .after = PlotIdFull)
@@ -559,17 +553,17 @@ server <- function(input, output, session){
         
         # only grab numeric columns
         numeric_cols <- sapply(comb(), is.numeric)
-        cols.comb.all <- names(comb())[numeric_cols]
+        cols.comb <- names(comb())[numeric_cols]
         
         # for paneled graphs, exclude any that start with 'elev'; these will be included always
-        cols.comb <- cols.comb.all[which(!stringr::str_starts(cols.comb.all, "elev"))]
+        cols.comb <- cols.comb[which(!stringr::str_starts(cols.comb, "elev"))]
         
         # exclude any columns that come before the PlotID field (including PlotID)
         col.cutoff <- which(cols.comb == "PlotID")
         cols.comb <- cols.comb[(col.cutoff + 1):length(cols.comb)]
         
-        col.cutoff2 <- which(cols.comb.all == "PlotID")
-        cols.comb.all <- cols.comb.all[(col.cutoff2 + 1):length(cols.comb.all)]
+        # add elev_mean and elev_sd back in
+        cols.comb.all <- c("elev_mean", "elev_sd", cols.comb)
         
         # use these column names for various selection buttons
         # columns for time series and transect profiles
@@ -611,31 +605,96 @@ server <- function(input, output, session){
     
     
     # tables ----
-    output$dt.elevs <- renderDT({
+    output$dt.elevs <- renderReactable({
         tmp <- elev_renamed() |> 
-            select(Year, PlotIdFull, starts_with("elev"))
+            select(Year, PlotIdFull, starts_with("elev"))|> 
+            mutate(across(starts_with("elev"), function(x) round(x, 4)))
+        
         if(input$elevAvgSel != "none"){
             tmp <- tmp |> 
-                relocate(elev_avg_fromCSV, .before = elev_mean)
+                relocate(elev_avg_fromCSV, .before = elev_mean) 
         }
-        DT::datatable(tmp,
-                      options = list(
-                          scrollX = TRUE,      # Enable horizontal scrolling
-                          scrollY = "350px",   # Enable vertical scrolling with fixed height
-                          # pageLength = 15,     # Number of rows per page
-                          pageLength = nrow(tmp),
-                          dom = "frti"        # Control which elements appear (f=filter, r=processing, t=table, i=info, p=pagination)
-                      )) |> 
-            DT::formatRound(columns = names(select(tmp, starts_with("elev"))),
-                            digits = 4)
+        
+        reactable(tmp,
+                  searchable = TRUE,
+                  filterable = TRUE,
+                  pagination = FALSE,
+                  striped = TRUE,
+                  highlight = TRUE,
+                  bordered = TRUE,
+                  resizable = TRUE,
+                  # fullWidth = FALSE,
+                  columns = list(
+                      Year = colDef(sticky = "left"),
+                      PlotIdFull = colDef(sticky = "left")
+                  ),
+                  defaultColDef = colDef(
+                      vAlign = "center", 
+                      headerVAlign = "bottom",
+                      sortNALast = TRUE)
+        )
     })
     
-    output$dt.veg <- renderDT({
-        DT::datatable(veg())
+    output$dt.veg <- renderReactable({
+        reactable(veg(),
+                  searchable = TRUE,
+                  filterable = TRUE,
+                  pagination = TRUE,
+                  striped = TRUE,
+                  highlight = TRUE,
+                  bordered = TRUE,
+                  resizable = TRUE,
+                  # fullWidth = FALSE,
+                  rowStyle = list(
+                      maxHeight = "80px"       
+                  ),
+                  columns = list(
+                      Year = colDef(sticky = "left"),
+                      PlotIdFull = colDef(sticky = "left"),
+                      Notes = colDef(minWidth = 200,
+                                     vAlign = "top"),
+                      Unique_ID = colDef(minWidth = 200)
+                  ),
+                  defaultColDef = colDef(
+                      headerStyle = list(
+                          maxHeight = "50px",        # Limit the height of the header
+                          whiteSpace = "nowrap",     # Prevent wrapping
+                          overflow = "hidden",       # Hide overflow
+                          textOverflow = "ellipsis"  # Add ellipsis for truncated text
+                      ),
+                      vAlign = "center", 
+                      headerVAlign = "bottom",
+                      sortNALast = TRUE
+                  )
+        )
     })
     
-    output$dt.comb <- renderDT({
-        DT::datatable(comb_subset())
+    output$dt.comb <- renderReactable({
+        reactable(comb_subset(),
+                  searchable = TRUE,
+                  filterable = TRUE,
+                  pagination = TRUE,
+                  striped = TRUE,
+                  highlight = TRUE,
+                  bordered = TRUE,
+                  resizable = TRUE,
+                  # fullWidth = FALSE,
+                  columns = list(
+                      Year = colDef(sticky = "left"),
+                      PlotIdFull = colDef(sticky = "left")
+                  ),
+                  defaultColDef = colDef(
+                      headerStyle = list(
+                          maxHeight = "50px",        # Limit the height of the header
+                          whiteSpace = "nowrap",     # Prevent wrapping
+                          overflow = "hidden",       # Hide overflow
+                          textOverflow = "ellipsis"  # Add ellipsis for truncated text
+                      ),
+                      vAlign = "center", 
+                      headerVAlign = "bottom",
+                      sortNALast = TRUE
+                  )
+        )
     })
     
     
