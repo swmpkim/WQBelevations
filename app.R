@@ -3,6 +3,7 @@ library(bslib)
 library(dplyr)
 library(tidyr)
 library(ggplot2)
+library(naniar)
 library(khroma)
 library(plotly)
 library(DT)
@@ -242,6 +243,38 @@ ui <- page_navbar(
                                       actionButton("uncheck_all_years.comb", "Uncheck All", 
                                                    class = "btn-sm",
                                                    style = "margin-top: 25px;")
+                                  )
+                              )
+                          )
+                      ),
+                      nav_panel(
+                          title = "Correlation Scatterplots",
+                          card(
+                              full_screen = TRUE,
+                              fill = TRUE,
+                              layout_columns(
+                                  col_widths = c(4, 4, 4),
+                                  
+                                  selectInput("corr.comb.x", "Select x-axis variable:",
+                                              choices = NULL,
+                                              multiple = FALSE),
+                                  selectInput("corr.comb.y", "Select y-axis variable:",
+                                              choices = NULL,
+                                              multiple = FALSE),
+                                  actionButton("corr.choices.made", "Use these choices")
+                                  
+                              ),
+                              layout_columns(
+                                  col_widths = c(10, 2),
+                                  card(plotOutput("p_corr.comb"),
+                                       full_screen = TRUE),
+                                  list(
+                                      p(strong("Correlation Coefficients:")),
+                                      textOutput("correlation_text.pear"),
+                                      textOutput("correlation_text.spear"),
+                                      checkboxInput("add.corr.line",
+                                                    "Add line?",
+                                                    value = FALSE)
                                   )
                               )
                           )
@@ -526,18 +559,30 @@ server <- function(input, output, session){
         
         # only grab numeric columns
         numeric_cols <- sapply(comb(), is.numeric)
-        cols.comb <- names(comb())[numeric_cols]
+        cols.comb.all <- names(comb())[numeric_cols]
         
-        # exclude any that start with 'elev'; these will be included always
-        cols.comb <- cols.comb[which(!stringr::str_starts(cols.comb, "elev"))]
+        # for paneled graphs, exclude any that start with 'elev'; these will be included always
+        cols.comb <- cols.comb.all[which(!stringr::str_starts(cols.comb.all, "elev"))]
         
         # exclude any columns that come before the PlotID field (including PlotID)
         col.cutoff <- which(cols.comb == "PlotID")
         cols.comb <- cols.comb[(col.cutoff + 1):length(cols.comb)]
         
+        col.cutoff2 <- which(cols.comb.all == "PlotID")
+        cols.comb.all <- cols.comb.all[(col.cutoff2 + 1):length(cols.comb.all)]
+        
+        # use these column names for various selection buttons
+        # columns for time series and transect profiles
         updateSelectInput(session,
                           "selected_cols.comb",
                           choices = cols.comb)
+        # columns for correlations
+        updateSelectInput(session,
+                          "corr.comb.x",
+                          choices = cols.comb.all)
+        updateSelectInput(session,
+                          "corr.comb.y",
+                          choices = cols.comb.all)
     })
     
     # observer for uncheck all button (combined time series)
@@ -722,6 +767,10 @@ server <- function(input, output, session){
     output$p_elevTransectProfile <- renderPlotly({
         req(elev_renamed(), input$selected_site, input$selected_years.elev)
         
+        min_year <- min(elev_renamed()$Year, na.rm = TRUE)
+        max_year <- max(elev_renamed()$Year, na.rm = TRUE)
+        mid_year <- mean(c(min_year, max_year))
+        
         tmp <- elev_renamed() |> 
             filter(SiteID == input$selected_site,
                    Year %in% input$selected_years.elev)
@@ -740,9 +789,11 @@ server <- function(input, output, session){
             theme(panel.grid.major = element_line(linetype = "dashed"),
                   panel.grid.minor = element_line(linetype = "blank")) + 
             scale_color_nightfall(reverse = TRUE,
-                                  midpoint = mean(elev_renamed()$Year, na.rm = TRUE)) +
+                                  limits = c(min_year, max_year),
+                                  midpoint = mid_year) +
             scale_fill_nightfall(reverse = TRUE,
-                                 midpoint = mean(elev_renamed()$Year, na.rm = TRUE))
+                                 limits = c(min_year, max_year),
+                                 midpoint = mid_year)
         
         # Add error bars if checkbox is checked
         if(input$show_errorbars_elevProfile) {
@@ -756,6 +807,11 @@ server <- function(input, output, session){
     # veg
     output$p_vegTransectProfile <- renderPlotly({
         req(veg(), input$selected_site.veg, input$selected_years.veg)
+        
+        min_year <- min(veg()$Year, na.rm = TRUE)
+        max_year <- max(veg()$Year, na.rm = TRUE)
+        mid_year <- mean(c(min_year, max_year))
+        
         tmp <- veg() |> 
             filter(SiteID == input$selected_site.veg,
                    Year %in% input$selected_years.veg) |> 
@@ -774,10 +830,12 @@ server <- function(input, output, session){
             theme(panel.grid.major = element_line(linetype = "dashed"),
                   panel.grid.minor = element_line(linetype = "blank")) + 
             scale_color_nightfall(reverse = TRUE,
-                                  midpoint = mean(veg()$Year, na.rm = TRUE)) +
+                                  limits = c(min_year, max_year),
+                                  midpoint = mid_year) +
             scale_fill_nightfall(reverse = TRUE,
-                                 midpoint = mean(veg()$Year, na.rm = TRUE)) +
-            labs(y = paste0(input$selected_column.veg, " Cover"))
+                                 limits = c(min_year, max_year),
+                                 midpoint = mid_year) +
+            labs(y = input$selected_column.veg)
         
         
         ggplotly(p)
@@ -790,6 +848,10 @@ server <- function(input, output, session){
         req(comb_subset(),
             input$selected_site.comb, input$selected_years.comb,
             input$selected_cols.comb)
+        
+        min_year <- min(comb_subset()$Year, na.rm = TRUE)
+        max_year <- max(comb_subset()$Year, na.rm = TRUE)
+        mid_year <- mean(c(min_year, max_year))
         
         tmp <- comb_subset() |> 
             arrange(PlotIdFull, Year) |> 
@@ -804,6 +866,7 @@ server <- function(input, output, session){
                                           .default = TransectID),
                    PlotID = case_when(is.na(PlotID) ~ as.numeric(Plot2),
                                       .default = PlotID)) |> 
+            tidyr::fill(elev_interp, .direction = "down") |> 
             select(-Site2, -Transect2, -Plot2) |> 
             filter(Year %in% input$selected_years.comb,
                    SiteID  == input$selected_site.comb)
@@ -818,34 +881,98 @@ server <- function(input, output, session){
                         group = Year,
                         col = Year,
                         fill = Year)) +
-            geom_point(size = 0.7,
-                       col = "gray30",
-                       shape = 21) +
-            geom_line() +
+            geom_point(size = 0.2,
+                       shape = 19) +
+            geom_line(alpha = 0.6) +
             geom_point(data = tmp2,
                        aes(size = Cover,
                            shape = Species,
                            y = elev_interp),
-                       alpha = 0.6) +
+                       alpha = 0.8) +
             geom_line(data = tmp2,
                        aes(y = elev_interp),
-                      linetype = "dashed",
+                      linetype = "dotted",
                        alpha = 0.6) +
             facet_grid(TransectID ~ SiteID, scales = "free_x") +
             theme_bw() +
             theme(panel.grid.major = element_line(linetype = "dashed"),
                   panel.grid.minor = element_line(linetype = "blank")) + 
             scale_color_nightfall(reverse = TRUE,
-                                  midpoint = mean(comb_subset()$Year, na.rm = TRUE)) +
+                                  limits = c(min_year, max_year),
+                                  midpoint = mid_year) +
             scale_fill_nightfall(reverse = TRUE,
-                                 midpoint = mean(comb_subset()$Year, na.rm = TRUE)) +
-            labs(y = "mean plot elevation (may be interpolated)",
-                 shape = "Species or cover")
+                                 limits = c(min_year, max_year),
+                                 midpoint = mid_year) +
+            scale_shape_manual(values = c(0, 2, 6, 1, 3, 4, 5)) + 
+            labs(y = "mean plot elevation (dashed line = interpolated)",
+                 shape = "Species or cover",
+                 size = "Cover")
         
         ggplotly(p)
     })
     
-}
+    # Correlations ----
+    # make strings when input button is clicked
+    corr.comb.x <- eventReactive(input$corr.choices.made, {
+        x <- input$corr.comb.x
+        x
+    })
+    
+    corr.comb.y <- eventReactive(input$corr.choices.made, {
+        y <- input$corr.comb.y
+        y
+    })
+    
+    # generate plot
+    output$p_corr.comb <- renderPlot({
+            req(comb(), corr.comb.x(), corr.comb.y())
+            
+            p <- ggplot(comb(),
+                        aes(x = .data[[corr.comb.x()]],
+                            y = .data[[corr.comb.y()]])) +
+                geom_miss_point(aes(shape = SiteID),
+                                size = 3) +
+                scale_shape_manual(values = c(0, 2, 6, 1, 3, 4, 5)) +
+                scale_color_brewer(palette = "Set1") +
+                theme_bw() 
+            
+            if(input$add.corr.line == TRUE){
+                p <- p +
+                    geom_smooth(method = "lm",
+                                se = FALSE,
+                                na.rm = TRUE,
+                                col = "gray20",
+                                linetype = "dashed")
+            }
+            
+            p
+            
+        })
+        
+        # correlation coefficients
+        output$correlation_text.pear <- renderText({
+            req(comb(), corr.comb.x(), corr.comb.y())
+            
+            corr.pear <- cor(comb()[[corr.comb.x()]], comb()[[corr.comb.y()]],
+                             use = "pairwise.complete.obs",
+                             method = "pearson")
+            
+            paste0("Pearson: ", round(corr.pear, 2))
+            
+        })
+        
+        output$correlation_text.spear <- renderText({
+            req(comb(), corr.comb.x(), corr.comb.y())
+            
+            corr.spear <- cor(comb()[[corr.comb.x()]], comb()[[corr.comb.y()]],
+                              use = "pairwise.complete.obs",
+                              method = "spearman")
+            
+            paste0("Spearman: ", round(corr.spear, 2))
+            
+        })
+
+}  # end server function
 
 # Run App ----
 shinyApp(ui, server)
