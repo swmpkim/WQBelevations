@@ -78,7 +78,80 @@ vegAndElev2 <- vegAndElev |>
     rowwise() |> 
     mutate(sumFs = sum(!is.na(c_across(starts_with("F_")))))
 
-# time series of elevation and algae/wrack?
+# number obs. per year ----
+cols_ID <- c("PlotIdFull", "SiteID", "TransectID", "PlotID",
+                  "Year", "Month", "Day", "Total")
+cols_ID_ind <- which(names(veg2) %in% cols_ID)
+# from Total + 1 to the next F_ column - 1
+a <- which(stringr::str_starts(names(veg2), "Density"))
+b <- which(names(veg2) == "Total")
+diff <- min(a[a > b])
+cols_veg <- seq(b + 1, diff - 1)
+cols_veg_names <- names(veg2)[cols_veg]
+
+veg3 <- veg2[, c(cols_ID_ind, cols_veg)]
+
+ht_cols <- names(veg2)[stringr::str_detect(names(veg2), "Height")]
+ht_cols <- ht_cols[!(ht_cols %in% c("Orthometric_Height", "Height_Relative_to_MLLW"))]
+
+# don't want !is.na(across all cols) to be 0
+test999 <- veg2 |> 
+    rowwise() |> 
+    mutate(nSpecies_Cover_measurements = sum(!is.na(c_across(all_of(cols_veg_names)))),
+           nSpecies_Density_measurements = sum(!is.na(c_across(all_of(starts_with("Density"))))),
+           nSpecies_Height_measurements = sum(!is.na(c_across(all_of(ht_cols))))) |>
+    ungroup() |> 
+    select(all_of(cols_ID), 
+           -Month, -Day, -PlotID, -Total,
+           nSpecies_Cover_measurements, 
+           nSpecies_Density_measurements, 
+           nSpecies_Height_measurements) |> 
+    mutate(Cover_completed = case_when(nSpecies_Cover_measurements > 0 ~ TRUE,
+                                 .default = FALSE),
+           Density_completed = case_when(nSpecies_Density_measurements > 0 ~ TRUE,
+                                 .default = FALSE),
+           Heights_completed = case_when(nSpecies_Height_measurements > 0 ~ TRUE,
+                                 .default = FALSE),
+           Site.Transect = paste(SiteID, TransectID, sep = "-"))
+
+reactable(test999,
+          groupBy = c("Year", "Site.Transect"),
+          columns = list(
+              nSpecies_Cover_measurements = colDef(aggregate = "sum"),
+              nSpecies_Density_measurements = colDef(aggregate = "sum"),
+              nSpecies_Height_measurements = colDef(aggregate = "sum"),
+              Cover_completed = colDef(aggregate = "frequency"),
+              Density_completed = colDef(aggregate = "frequency"),
+              Heights_completed = colDef(aggregate = "frequency")
+          ),
+          defaultColDef = colDef(
+              style = JS("function(rowInfo) {
+       // Initialize the style object
+      var style = {};
+
+      // Check if the row is aggregated
+      if (rowInfo.aggregated) {
+        style.fontWeight = 'bold'; // Bold font for aggregated rows
+
+        // Check if Cover_completed contains 'false' for aggregated rows
+        if (rowInfo.row['Cover_completed'] && rowInfo.row['Cover_completed'].toString().includes('false')) {
+          style.backgroundColor = '#ffd27f'; // Orange background for aggregated rows containing 'false'
+        }
+      } else {
+        // For non-aggregated rows, check if Cover_completed is exactly false
+        if (rowInfo.row['Cover_completed'] === false) {
+          style.backgroundColor = '#ffdb99'; // Orange background for non-aggregated rows where Cover_completed is false
+        style.fontWeight = 'bold';
+        }
+      }
+
+      return style;
+      }")
+              )
+          )
+
+
+# time series of elevation and algae/wrack? ----
 ts_test <- vegAndElev2 |> 
     select(PlotIdFull:Total, SiteID, TransectID, PlotID,
            Bare, Dead, Wrack, Water, Algae,

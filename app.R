@@ -6,8 +6,9 @@ library(ggplot2)
 library(naniar)
 library(khroma)
 library(plotly)
-library(DT)
+# library(DT)
 library(reactable)
+library(skimr)
 
 
 # to-dos
@@ -53,8 +54,13 @@ ui <- page_navbar(
               navset_card_tab(
                   nav_panel(
                       title = "Elevation data preview",
-                      htmltools::tags$small("This table is interactive. Columns can be sorted by clicking on their name, or filtered by typing into the box below the name. The entire table is searchable via the box at its upper right."),
+                      htmltools::tags$small("This table is interactive. Columns can be sorted by clicking on their name, or filtered by typing into the box below the name."),
                       reactableOutput("dt.elevs")
+                  ),
+                  nav_panel(
+                      title = "Elevation data summary",
+                      htmltools::tags$small("This table is interactive. Columns can be sorted by clicking on their name, or filtered by typing into the box below the name."),
+                      reactableOutput("dt.elevs.skimr")
                   ),
                   nav_panel(
                       title = "Elevation histograms",
@@ -140,9 +146,22 @@ ui <- page_navbar(
                   
                   nav_panel(
                       title = "Vegetation Data preview",
-                      htmltools::tags$small("This table is interactive. Columns can be sorted by clicking on their name, or filtered by typing into the box below the name. The entire table is searchable via the box at its upper right."),
+                      htmltools::tags$small("This table is interactive. Columns can be sorted by clicking on their name, or filtered by typing into the box below the name."),
                       reactableOutput("dt.veg")
                   ),
+                  
+                  nav_panel(
+                      title = "Vegetation Data summary",
+                      htmltools::tags$small("This table is interactive. Columns can be sorted by clicking on their name, or filtered by typing into the box below the name. Rows highlighted in orange represent sampling events where no Cover readings were recorded."),
+                      reactableOutput("dt.veg.skimr")
+                  ),
+                  
+                  nav_panel(
+                      title = "Vegetation Sampling summary",
+                      htmltools::tags$small("This table is interactive. Columns can be sorted by clicking on their name, or filtered by typing into the box below the name."),
+                      reactableOutput("dt.veg_samples")
+                  ),
+                  
                   nav_panel(
                       title = "Vegetation time series",
                       card(
@@ -199,9 +218,10 @@ ui <- page_navbar(
                       
                       nav_panel(
                           title = "Combined Data preview",
-                          htmltools::tags$small("This table is interactive. Columns can be sorted by clicking on their name, or filtered by typing into the box below the name. The entire table is searchable via the box at its upper right."),
+                          htmltools::tags$small("This table is interactive. Columns can be sorted by clicking on their name, or filtered by typing into the box below the name."),
                           reactableOutput("dt.comb")
                       ),
+                      
                       nav_panel(
                           title = "Combined time series",
                           card(
@@ -311,6 +331,46 @@ server <- function(input, output, session){
             relocate(PlotIdFull)
     })
     
+    veg_samples <- reactive({
+        req(veg())
+        
+        # ID cols
+        cols_ID <- c("PlotIdFull", "SiteID", "TransectID", "PlotID",
+                     "Year", "Month", "Day", "Total")
+        cols_ID_ind <- which(names(veg()) %in% cols_ID)
+        
+        # columns with veg or abiotic covers recorded
+        a <- which(stringr::str_starts(names(veg()), "Density"))
+        b <- which(names(veg()) == "Total")
+        diff <- min(a[a > b])  # the smallest index of a column starting with "Density" and to the right of "total" (was originally for F_ cols)
+        cols_veg <- seq(b + 1, diff - 1)  # all the columns b/t Total and Density_
+        cols_veg_names <- names(veg())[cols_veg]  # the names of those columns
+        # columns containing "Height", so it can be used by other reserves too
+        ht_cols <- names(veg())[stringr::str_detect(names(veg()), "Height")]
+        ht_cols <- ht_cols[!(ht_cols %in% c("Orthometric_Height", "Height_Relative_to_MLLW"))]
+        
+        # tally up readings by type for each sample
+        df <- veg() |> 
+            rowwise() |> 
+            mutate(nSpecies_Cover_measurements = sum(!is.na(c_across(all_of(cols_veg_names)))),
+                   nSpecies_Density_measurements = sum(!is.na(c_across(all_of(starts_with("Density"))))),
+                   nSpecies_Height_measurements = sum(!is.na(c_across(all_of(ht_cols))))) |>
+            ungroup() |> 
+            select(all_of(cols_ID), 
+                   -Month, -Day, -PlotID, -Total,
+                   nSpecies_Cover_measurements, 
+                   nSpecies_Density_measurements, 
+                   nSpecies_Height_measurements) |> 
+            mutate(Cover_completed = case_when(nSpecies_Cover_measurements > 0 ~ TRUE,
+                                               .default = FALSE),
+                   Density_completed = case_when(nSpecies_Density_measurements > 0 ~ TRUE,
+                                                 .default = FALSE),
+                   Heights_completed = case_when(nSpecies_Height_measurements > 0 ~ TRUE,
+                                                 .default = FALSE),
+                   Site.Transect = paste(SiteID, TransectID, sep = "-")) |> 
+            select(-SiteID, -TransectID)
+    })
+    
     comb <- reactive({
         req(veg(), elev_renamed())
         full_join(veg(), elev_renamed(),
@@ -355,9 +415,10 @@ server <- function(input, output, session){
                           starts_with("elev")) |> 
             dplyr::rowwise() |> 
             dplyr::mutate(elev_mean = round(mean(c_across(starts_with("elevation")), na.rm = TRUE), 4),
-                          elev_sd = round(sd(c_across(starts_with("elevation")), na.rm = TRUE), 4)) |> 
+                          elev_sd = round(sd(c_across(starts_with("elevation")), na.rm = TRUE), 4),
+                          nReadings =  sum(!is.na(c_across(all_of(starts_with("elevation")))))) |> 
             dplyr::ungroup() |> 
-            dplyr::relocate(c(elev_mean, elev_sd),
+            dplyr::relocate(c(nReadings, elev_mean, elev_sd),
                             .after = PlotIdFull)
     })
     
@@ -607,7 +668,7 @@ server <- function(input, output, session){
     # tables ----
     output$dt.elevs <- renderReactable({
         tmp <- elev_renamed() |> 
-            select(Year, PlotIdFull, starts_with("elev"))|> 
+            select(Year, PlotIdFull, nReadings, starts_with("elev"))|> 
             mutate(across(starts_with("elev"), function(x) round(x, 4)))
         
         if(input$elevAvgSel != "none"){
@@ -616,7 +677,7 @@ server <- function(input, output, session){
         }
         
         reactable(tmp,
-                  searchable = TRUE,
+                  # searchable = TRUE,
                   filterable = TRUE,
                   pagination = FALSE,
                   striped = TRUE,
@@ -635,9 +696,45 @@ server <- function(input, output, session){
         )
     })
     
+    output$dt.elevs.skimr <- renderReactable({
+        tmp <- elev_renamed() |> 
+            select(Year, PlotIdFull, nReadings, starts_with("elev"))|> 
+            mutate(across(starts_with("elev"), function(x) round(x, 4)))
+        
+        if(input$elevAvgSel != "none"){
+            tmp <- tmp |> 
+                relocate(elev_avg_fromCSV, .before = elev_mean) 
+        }
+        
+        tmp.skimr <- skim_without_charts(tmp) |> 
+            mutate(across(c(numeric.mean, numeric.sd),
+                          function(x) round(x, 4)),
+                   complete_rate = round(complete_rate, 3))
+        
+        reactable(tmp.skimr,
+                  # searchable = TRUE,
+                  filterable = TRUE,
+                  pagination = FALSE,
+                  striped = TRUE,
+                  highlight = TRUE,
+                  bordered = TRUE,
+                  resizable = TRUE,
+                  # fullWidth = FALSE,
+                  columns = list(
+                      skim_type = colDef(sticky = "left"),
+                      skim_variable = colDef(sticky = "left"),
+                      complete_rate = colDef(sticky = "left")
+                  ),
+                  defaultColDef = colDef(
+                      vAlign = "center", 
+                      headerVAlign = "bottom",
+                      sortNALast = TRUE)
+        )
+    })
+    
     output$dt.veg <- renderReactable({
         reactable(veg(),
-                  searchable = TRUE,
+                  # searchable = TRUE,
                   filterable = TRUE,
                   pagination = TRUE,
                   striped = TRUE,
@@ -669,6 +766,93 @@ server <- function(input, output, session){
         )
     })
     
+    output$dt.veg.skimr <- renderReactable({
+        tmp.skimr <- skim_without_charts(veg()) |> 
+            mutate(across(c(starts_with("numeric")),
+                          function(x) round(x, 2)),
+                   complete_rate = round(complete_rate, 3))
+        
+        reactable(tmp.skimr,
+                  # searchable = TRUE,
+                  filterable = TRUE,
+                  pagination = FALSE,
+                  striped = TRUE,
+                  highlight = TRUE,
+                  bordered = TRUE,
+                  resizable = TRUE,
+                  # fullWidth = FALSE,
+                  columns = list(
+                      skim_type = colDef(sticky = "left"),
+                      skim_variable = colDef(sticky = "left"),
+                      complete_rate = colDef(sticky = "left")
+                  ),
+                  defaultColDef = colDef(
+                      vAlign = "center", 
+                      headerVAlign = "bottom",
+                      sortNALast = TRUE)
+        )
+        
+    })
+    
+    output$dt.veg_samples <- renderReactable({
+        reactable(veg_samples(),
+                  groupBy = c("Year", "Site.Transect"),
+                  # searchable = TRUE,
+                  filterable = TRUE,
+                  pagination = TRUE,
+                  striped = TRUE,
+                  highlight = TRUE,
+                  bordered = TRUE,
+                  resizable = TRUE,
+                  # fullWidth = FALSE,
+                  columns = list(
+                      Year = colDef(sticky = "left",
+                                    minWidth = 115),
+                      Site.Transect = colDef(minWidth = 115,
+                                             sticky = "left"),
+                      PlotIdFull = colDef(sticky = "left",
+                                          minWidth = 125),
+                      nSpecies_Cover_measurements = colDef(aggregate = "sum"),
+                      nSpecies_Density_measurements = colDef(aggregate = "sum"),
+                      nSpecies_Height_measurements = colDef(aggregate = "sum"),
+                      Cover_completed = colDef(aggregate = "frequency"),
+                      Density_completed = colDef(aggregate = "frequency"),
+                      Heights_completed = colDef(aggregate = "frequency")
+                  ),
+                  defaultColDef = colDef(
+                      vAlign = "center", 
+                      headerVAlign = "top",
+                      sortNALast = TRUE,
+                      headerStyle = list(
+                          maxHeight = "80px", 
+                          overflow = "hidden"
+                      ),
+                      style = JS("function(rowInfo) {
+       // Initialize the style object
+      var style = {};
+
+      // Check if the row is aggregated
+      if (rowInfo.aggregated) {
+        style.fontWeight = 'bold'; // Bold font for aggregated rows
+
+        // Check if Cover_completed contains 'false' for aggregated rows
+        if (rowInfo.row['Cover_completed'] && rowInfo.row['Cover_completed'].toString().includes('false')) {
+          style.backgroundColor = '#ffd27f'; // Orange background for aggregated rows containing 'false'
+        }
+      } else {
+        // For non-aggregated rows, check if Cover_completed is exactly false
+        if (rowInfo.row['Cover_completed'] === false) {
+          style.backgroundColor = '#ffdb99'; // Orange background for non-aggregated rows where Cover_completed is false
+        style.fontWeight = 'bold';
+        }
+      }
+
+      return style;
+      }")
+                  )
+        )
+    })
+    
     output$dt.comb <- renderReactable({
         reactable(comb_subset(),
                   searchable = TRUE,
@@ -696,6 +880,7 @@ server <- function(input, output, session){
                   )
         )
     })
+    
     
     
     # histograms ----
