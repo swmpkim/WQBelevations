@@ -12,10 +12,14 @@ library(skimr)
 
 
 # UI ----
-ui <- page_sidebar(
-    title = "Veg Data Exploration App",
+ui <- page_navbar(
+    title = "Veg Data Exploration",
     theme = bs_theme(version = 5),
+    # bg = "#0062cc",
+    bg = "#477FB0",
+    inverse = TRUE,
     underline = TRUE,
+    collapsible = FALSE,
     
     
     sidebar = sidebar(
@@ -32,29 +36,36 @@ ui <- page_sidebar(
     ),
     
     # Vegetation data panel ----
-    # nav_panel("Vegetation",
+    nav_panel("Tables",
                navset_card_tab(
                   
                   nav_panel(
-                      title = "Vegetation Data preview",
-                      htmltools::tags$small("This table is interactive. Columns can be sorted by clicking on their name, or filtered by typing into the box below the name."),
+                      title = "Data preview",
+                      htmltools::tags$small("This table reflects the input data. The table is interactive. Columns can be sorted by clicking on their name, or filtered by typing into the box below the name."),
                       reactableOutput("dt.veg")
                   ),
                   
                   nav_panel(
-                      title = "Vegetation Data summary",
-                      htmltools::tags$small("This table is interactive. Columns can be sorted by clicking on their name, or filtered by typing into the box below the name. Rows highlighted in orange represent sampling events where no Cover readings were recorded."),
+                      title = "Column summary",
+                      htmltools::tags$small("This table provides information about each column in the data. The table is interactive. Columns can be sorted by clicking on their name, or filtered by typing into the box below the name."),
                       reactableOutput("dt.veg.skimr")
                   ),
                   
                   nav_panel(
-                      title = "Vegetation Sampling summary",
-                      htmltools::tags$small("This table is interactive. Columns can be sorted by clicking on their name, or filtered by typing into the box below the name."),
+                      title = "Sampling summary",
+                      htmltools::tags$small("This table is interactive. Columns can be sorted by clicking on their name, or filtered by typing into the box below the name. Rows highlighted in orange represent sampling events where no Cover readings were recorded."),
                       reactableOutput("dt.veg_samples")
-                  ),
+                  )
+                  
+               ) # end tabbed panel
+    ), # end Tables panel
+    
+    # Graphs panel ----
+    nav_panel("Graphs",
+              navset_card_tab(
                   
                   nav_panel(
-                      title = "Vegetation time series",
+                      title = "Time series",
                       card(
                           full_screen = TRUE,
                           card(
@@ -72,7 +83,7 @@ ui <- page_sidebar(
                       )
                   ),
                   nav_panel(
-                      title = "Vegetation Transect Profiles",
+                      title = "Transect Profiles",
                       card(
                           full_screen = TRUE,
                           card(
@@ -123,7 +134,7 @@ ui <- page_sidebar(
                       )
                   )
               ) # end navset_tab
-    # ), # end nav_panel
+    ) # end nav_panel
     
 
 ) # end UI

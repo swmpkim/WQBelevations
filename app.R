@@ -11,16 +11,12 @@ library(reactable)
 library(skimr)
 
 
-# to-dos
-# make table of # plots per transect by sample year
-# number of missing observations
-# in the data preview/renamed df - make column for # readings in the plot that day
-
 # UI ----
 ui <- page_navbar(
     title = "WQB Elevations App",
     theme = bs_theme(version = 5),
-    bg = "#0062cc",
+    bg = "#477FB0",
+    inverse = TRUE,
     underline = TRUE,
     
     # Sidebar - read in data files and control options
@@ -54,12 +50,12 @@ ui <- page_navbar(
               navset_card_tab(
                   nav_panel(
                       title = "Elevation data preview",
-                      htmltools::tags$small("This table is interactive. Columns can be sorted by clicking on their name, or filtered by typing into the box below the name."),
+                      htmltools::tags$small("This table reflects the input data. The table is interactive. Columns can be sorted by clicking on their name, or filtered by typing into the box below the name."),
                       reactableOutput("dt.elevs")
                   ),
                   nav_panel(
-                      title = "Elevation data summary",
-                      htmltools::tags$small("This table is interactive. Columns can be sorted by clicking on their name, or filtered by typing into the box below the name."),
+                      title = "Elevation column summary",
+                      htmltools::tags$small("This table provides information about each column in the data. The  table is interactive. Columns can be sorted by clicking on their name, or filtered by typing into the box below the name."),
                       reactableOutput("dt.elevs.skimr")
                   ),
                   nav_panel(
@@ -145,20 +141,20 @@ ui <- page_navbar(
               navset_card_tab(
                   
                   nav_panel(
-                      title = "Vegetation Data preview",
-                      htmltools::tags$small("This table is interactive. Columns can be sorted by clicking on their name, or filtered by typing into the box below the name."),
+                      title = "Vegetation data preview",
+                      htmltools::tags$small("This table reflects the input data. The table is interactive. Columns can be sorted by clicking on their name, or filtered by typing into the box below the name."),
                       reactableOutput("dt.veg")
                   ),
                   
                   nav_panel(
-                      title = "Vegetation Data summary",
-                      htmltools::tags$small("This table is interactive. Columns can be sorted by clicking on their name, or filtered by typing into the box below the name. Rows highlighted in orange represent sampling events where no Cover readings were recorded."),
+                      title = "Vegetation column summary",
+                      htmltools::tags$small("This table provides information about each column in the data. The table is interactive. Columns can be sorted by clicking on their name, or filtered by typing into the box below the name."),
                       reactableOutput("dt.veg.skimr")
                   ),
                   
                   nav_panel(
-                      title = "Vegetation Sampling summary",
-                      htmltools::tags$small("This table is interactive. Columns can be sorted by clicking on their name, or filtered by typing into the box below the name."),
+                      title = "Vegetation sampling summary",
+                      htmltools::tags$small("This table is interactive. Columns can be sorted by clicking on their name, or filtered by typing into the box below the name. Rows highlighted in orange represent sampling events where no Cover readings were recorded."),
                       reactableOutput("dt.veg_samples")
                   ),
                   
