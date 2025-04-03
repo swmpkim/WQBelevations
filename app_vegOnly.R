@@ -1,3 +1,6 @@
+# this app is published at catbirdstats.shinyapps.io/vegData_exploration
+
+
 library(shiny)
 library(bslib)
 library(dplyr)
@@ -10,6 +13,58 @@ library(plotly)
 library(reactable)
 library(skimr)
 
+# description text ----
+# store as variables so the wording can be used in multiple places  
+data_preview_desc1 <- "View, sort, filter, and search the raw data in the 'Cover' worksheet of your file. This table is laid out exactly the same as your original spreadsheet." 
+data_preview_desc2 <- HTML(
+    "<p>Columns can be sorted by clicking on their name, or filtered by typing into the box below the name.</p>
+    <p>You probably only need this table if you see anything unexpected in your data via the other tables and graphs. Search for the values here without having to return to your original spreadsheet. Any data updates however will need to be made in the original spreadsheet.</p>"
+)
+
+column_summary_desc1 <- "This table shows you how R 'sees' your data. This table is good to look through to make sure values in your columns align with your expectations (e.g. you do not have any vegetation cover values of 500)."
+column_summary_desc2 <- HTML(
+    "<p>The table contains one row for each column of the data. It shows you what each column type is and summarizes the values in the column. Note, empty columns are typically seen as 'logical' (true or false). Every column type displays information about how many cells are full and empty, and what the completeness rate is (number of non-empty cells divided by number of rows).</p>
+    <p>For character columns, you see how many unique entries exist. For numeric columns, you see numeric summaries like the min, mean, median, and max.</p>"
+)
+
+sampling_summary_desc1 <- "This table provides a summary of sampling events and flags any vegetation plot-date combinations where there is no vegetation cover recorded."
+sampling_summary_desc2 <- HTML(
+    "<p>For each vegetation plot on each date, true or false is assigned to denote whether each of cover, height, and density were collected. If cover has a 'false' value, the row is orange to draw your attention.</p>
+    <p>Rows are initially shown at only the site/date level, and can be expanded all the way down to vegetation plot level so you can find which row is causing the flagging. Any issues you find need to be addressed in the data file."
+)
+
+time_series_desc1 <- "See how a variable changes over time at a site. In the sidebar, choose your site and any numeric variable from your file."
+time_series_desc2 <- HTML(
+    "<p>x-axis: date</p>
+    <p>y-axis: the selected variable's value</p>
+    <p>points: one for each vegetation plot on each date, showing the variable's value</p>
+    <p>lines: one for each vegetation plot, showing the variable through time</p>
+    <p>panels: each panel represents a transect, and contains all vegetation plots in that transect</p>
+    <p>selections: vegetation plots can be removed and added using the checkboxes, if you want to focus on one or a few.</p>"
+)
+
+transect_profiles_desc1 <- "See how a variable changes along a cross-section of your transect. In the sidebar, choose your site and any numeric variable from your file."
+transect_profiles_desc2 <- HTML(
+    "<p>x-axis: vegetation plot (numerically ordered; presumably either water-to-upland or vice versa)</p>
+    <p>y-axis: the selected variable's value</p>
+    <p>points: one for each vegetation plot on each date, showing the variable's value</p>
+    <p>lines: one for each year</p>
+    <p>panels: each panel represents a transect, and contains all vegetation plots in that transect</p>
+    <p>selections: years can be removed and added using the checkboxes, if you want to focus on one or a few.</p>"
+)
+
+correlation_scatterplots_desc1 <- "Explore relationships between variables, across all sites. This graph only updates when you click the 'Use these choices' button. This is the only graph that is not interactive."
+correlation_scatterplots_desc2 <- HTML(
+    "<p>You choose the variables to display on each axis.</p>
+    <p>points: one for each vegetation plot on each date</p>
+    <p>shape: represents site - are there differences in the relationship between sites?</p>
+    <p>color: represents missing vs. non-missing values. If a 'missing' colored point is near the origin, it is missing for both variables. If a value is missing for only one of the two variables, it will be near 0 for the variable that is missing but at the appropriate value for the axis where a variable is present. e.g., if a missing value is placed at 80 along the x-axis, and is near the axis, the y-variable was not measured (and is presumably 0, unless it was truly missing data).</p>
+    <p>line: if selected, a linear regression line is added to the graph.</p>"
+)
+
+table_interactivity_desc <- "This table is interactive. Columns can be sorted by clicking on their name or filtered by typing into the box below the name."
+
+
 
 # UI ----
 ui <- page_navbar(
@@ -19,20 +74,71 @@ ui <- page_navbar(
     bg = "#477FB0",
     inverse = TRUE,
     underline = TRUE,
-    collapsible = FALSE,
-    
+
     
     sidebar = sidebar(
-        title = "Choices",
+        title = NULL,
         # veg data file
-        fileInput("file.veg", "Which file has vegetation data?", 
+        fileInput("file.veg", 
+                  span(
+                      h5("Upload vegetation file"), 
+                      tooltip(
+                          bsicons::bs_icon("info-circle"),
+                          "The file must be an Excel file in the Namaste project format.",
+                          placement = "right"
+                      )
+                  ), 
                   multiple = FALSE,
                   accept = ".xlsx"),
-        h5("For Time Series and Transect Profiles:"),
+        span(
+            h5("Options for time series and transect profile graphics"),
+            tooltip(
+                bsicons::bs_icon("info-circle"),
+                "The time series and transect profile graphs allow detailed examination of one parameter at one site at a time. Select (and change) either or both here and choices will apply in the tabs for both graphic types.",
+                placement = "right"
+            )
+        ),
         selectInput("selected_site.veg", "Select Site:", 
                     choices = NULL),
         selectInput("selected_column.veg", "Select Column:", 
                     choices = NULL)
+    ),
+    
+    # About panel ----
+    nav_panel("About",
+              card(
+                  card_header("About this app"),
+                  p("This application allows users to explore vegetation data when it is in the format provided by the Namaste project."),
+                  p("Most pieces of this app are interactive. Tables can be searched and sorted; graphs can have features added or removed; and hovering over a point on a graph will show that point's values."),
+                  p("Information icons (", bsicons::bs_icon("info-circle"), ") are throughout the app to provide more details about specific features. In sidebars you generally hover to see the information, and in the main sections of content you need to click on them."),
+                  h4("How to use this app:"),
+                  tags$ol(
+                      tags$li(strong("Upload your vegetation data file"), "using the sidebar. This information will not be retained by the app once you close the session."),
+                      tags$li(
+                          span(strong("See tabular summaries"), " of your data by selecting 'Tables' from the navigation bar at the top of the app."),
+                          tags$ol(
+                              style = "list-style-type: lower-alpha; margin-top: 8px;",
+                              tags$li(em(strong("Data preview:")), " ", data_preview_desc1),
+                              tags$li(em(strong("Column summary:")), " ", column_summary_desc1),
+                              tags$li(em(strong("Sampling summary:")), " ", sampling_summary_desc1)
+                          )
+                      ),
+                      tags$li(
+                          span(strong("Explore graphs"), " of your data by selecting 'Graphs' from the navigation bar at the top of the app."),
+                          tags$ol(
+                              style = "list-style-type: lower-alpha; margin-top: 8px;",
+                              tags$li(em(strong("Time series:")), " ", time_series_desc1),
+                              tags$li(em(strong("Transect Profiles:")), " ", transect_profiles_desc1),
+                              tags$li(em(strong("Correlation Scatterplots:")), " ", correlation_scatterplots_desc1)
+                          )
+                      )
+                      
+                  ),
+                  hr(),
+                  p("This app was developed in support of the National Estuarine Research Reserve System, a partnership between the National Oceanic and Atmospheric Administration and coastal states. However, it is not an official NERRS or CDMO tool, and is available as a courtesy."),
+                  p("Funding was provided by the NERRS Science Collaborative under the Namaste project. For more information on Namaste, see our ", tags$a("Marsh Response to Sea Level Rise", href = "https://www.nerra.org/science-tools/marsh-response-to-sea-level-rise/", target = "_blank"), "page. For more information on the NERRS Science Collaborative, see ", tags$a("the Science Collaborative", href = "https://https://nerrssciencecollaborative.org/", target = "_blank"), " page."),
+                  p("Developed by ", tags$a("Catbird Stats, LLC", href = "https://www.catbirdstats.com", target = "_blank"), ". For questions about this app, please contact ", tags$a("kim@catbirdstats.com", href = "mailto:kim@catbirdstats.com"), ".")
+              )
     ),
     
     # Vegetation data panel ----
@@ -41,19 +147,34 @@ ui <- page_navbar(
                   
                   nav_panel(
                       title = "Data preview",
-                      htmltools::tags$small("This table reflects the input data. The table is interactive. Columns can be sorted by clicking on their name, or filtered by typing into the box below the name."),
+                      htmltools::tags$small(
+                          data_preview_desc1,
+                          table_interactivity_desc,
+                          # "This table reflects the input data. The table is interactive. Columns can be sorted by clicking on their name, or filtered by typing into the box below the name.",
+                          actionLink("data_preview_info", bsicons::bs_icon("info-circle"))
+                          ),
                       reactableOutput("dt.veg")
                   ),
                   
                   nav_panel(
                       title = "Column summary",
-                      htmltools::tags$small("This table provides information about each column in the data. The table is interactive. Columns can be sorted by clicking on their name, or filtered by typing into the box below the name."),
+                      htmltools::tags$small(
+                          column_summary_desc1,
+                          table_interactivity_desc,
+                          # "This table provides information about each column in the data. The table is interactive. Columns can be sorted by clicking on their name, or filtered by typing into the box below the name.",
+                          actionLink("column_summary_info", bsicons::bs_icon("info-circle"))
+                          ),
                       reactableOutput("dt.veg.skimr")
                   ),
                   
                   nav_panel(
                       title = "Sampling summary",
-                      htmltools::tags$small("This table is interactive. Columns can be sorted by clicking on their name, or filtered by typing into the box below the name. Rows highlighted in orange represent sampling events where no Cover readings were recorded."),
+                      htmltools::tags$small(
+                          sampling_summary_desc1,
+                          table_interactivity_desc,
+                          # "This table is interactive. Columns can be sorted by clicking on their name, or filtered by typing into the box below the name. Rows highlighted in orange represent sampling events where no Cover readings were recorded.",
+                          actionLink("sampling_summary_info", bsicons::bs_icon("info-circle"))
+                          ),
                       reactableOutput("dt.veg_samples")
                   )
                   
@@ -67,11 +188,15 @@ ui <- page_navbar(
                   nav_panel(
                       title = "Time series",
                       card(
+                          htmltools::tags$small(
+                              time_series_desc1,
+                              actionLink("time_series_info", bsicons::bs_icon("info-circle"))
+                          ),
                           full_screen = TRUE,
                           card(
                               layout_columns(
                                   col_widths = c(10, 2),
-                                  checkboxGroupInput("selected_plots.veg", "Select Plot ID(s):",
+                                  checkboxGroupInput("selected_plots.veg", "Included vegetation plots:",
                                                      choices = NULL,
                                                      inline = TRUE),
                                   actionButton("uncheck_all.veg", "Uncheck All", 
@@ -85,6 +210,10 @@ ui <- page_navbar(
                   nav_panel(
                       title = "Transect Profiles",
                       card(
+                          htmltools::tags$small(
+                              transect_profiles_desc1,
+                              actionLink("transect_profiles_info", bsicons::bs_icon("info-circle"))
+                          ),
                           full_screen = TRUE,
                           card(
                               layout_columns(
@@ -104,6 +233,10 @@ ui <- page_navbar(
                   nav_panel(
                       title = "Correlation Scatterplots",
                       card(
+                          htmltools::tags$small(
+                              correlation_scatterplots_desc1,
+                              actionLink("correlation_scatterplots_info", bsicons::bs_icon("info-circle"))
+                          ),
                           full_screen = TRUE,
                           fill = TRUE,
                           layout_columns(
@@ -509,6 +642,68 @@ server <- function(input, output, session){
             
             paste0("Spearman: ", round(corr.spear, 2))
             
+        })
+        
+        # Modals ----
+        # for detailed descriptions of everything to be pop-ups
+        observeEvent(input$data_preview_info, {
+            showModal(modalDialog(
+                title = "Data Preview Table",
+                data_preview_desc2,
+                footer = modalButton("Close"),
+                easyClose = TRUE,
+                size = "m"
+            ))
+        })
+        
+        observeEvent(input$column_summary_info, {
+            showModal(modalDialog(
+                title = "Column Summary Table",
+                column_summary_desc2,
+                footer = modalButton("Close"),
+                easyClose = TRUE,
+                size = "m"
+            ))
+        })
+        
+        observeEvent(input$sampling_summary_info, {
+            showModal(modalDialog(
+                title = "Sampling Summary Table",
+                sampling_summary_desc2,
+                footer = modalButton("Close"),
+                easyClose = TRUE,
+                size = "m"
+            ))
+        })
+        
+        observeEvent(input$time_series_info, {
+            showModal(modalDialog(
+                title = "Time Series Graph",
+                time_series_desc2,
+                footer = modalButton("Close"),
+                easyClose = TRUE,
+                size = "m"
+            ))
+        })
+        
+        observeEvent(input$transect_profiles_info, {
+            showModal(modalDialog(
+                title = "Transect Profile Graph",
+                transect_profiles_desc2,
+                footer = modalButton("Close"),
+                easyClose = TRUE,
+                size = "m"
+            ))
+        })
+        
+        observeEvent(input$correlation_scatterplots_info, {
+            showModal(modalDialog(
+                title = "Correlation Scatterplots",
+                correlation_scatterplots_desc2,
+                footer = modalButton("Close"),
+                easyClose = TRUE,
+                size = "m"
+            ))
         })
 
 }  # end server function

@@ -23,7 +23,15 @@ ui <- page_navbar(
     sidebar = sidebar(
         title = "File Inputs",
         # elevation file
-        fileInput("file.elevs", "Which file has elevation data?", 
+        fileInput("file.elevs", 
+                  span(
+                      "Upload elevation file", 
+                      tooltip(
+                          bsicons::bs_icon("info-circle"),
+                          "The file must be a csv file following Waquoit Bay NERR's formatting.",
+                          placement = "right"
+                      )
+                  ),  
                   multiple = FALSE,
                   accept = ".csv"),
         # column selection for elevation file
@@ -34,7 +42,15 @@ ui <- page_navbar(
                     choices = NULL,
                     multiple = FALSE),
         # veg data file
-        fileInput("file.veg", "Which file has vegetation data?", 
+        fileInput("file.veg", 
+                  span(
+                      "Upload vegetation file", 
+                      tooltip(
+                          bsicons::bs_icon("info-circle"),
+                          "The file must be an Excel file in the Namaste project format.",
+                          placement = "right"
+                      )
+                  ),  
                   multiple = FALSE,
                   accept = ".xlsx")
     ),  # end sidebar
@@ -43,7 +59,15 @@ ui <- page_navbar(
     nav_panel("Elevations",
               layout_sidebar(
                   sidebar = sidebar(
-                      title = "Choices for Time Series and Transect Profile tabs",
+                      title = NULL,
+                      span(
+                          h5("Options for time series and transect profile graphics"),
+                          tooltip(
+                              bsicons::bs_icon("info-circle"),
+                              "The time series and transect profile graphs allow detailed examination of one parameter at one site at a time. Select (and change) either or both here and choices will apply in the tabs for both graphic types.",
+                              placement = "right"
+                          )
+                      ),
                       selectInput("selected_site", "Select Site:", 
                                   choices = NULL)
                   ),
@@ -86,7 +110,7 @@ ui <- page_navbar(
                               card(
                                   layout_columns(
                                       col_widths = c(10, 2),
-                                      checkboxGroupInput("selected_plots", "Select Plot ID(s):",
+                                      checkboxGroupInput("selected_plots", "Included vegetation plots:",
                                                          choices = NULL,
                                                          inline = TRUE),
                                       actionButton("uncheck_all", "Uncheck All", 
@@ -131,7 +155,15 @@ ui <- page_navbar(
     nav_panel("Vegetation",
               layout_sidebar(
                   sidebar = sidebar(
-                      title = "Choices for Time Series and Transect Profile tabs",
+                      title = NULL,
+                      span(
+                          h5("Options for time series and transect profile graphics"),
+                          tooltip(
+                              bsicons::bs_icon("info-circle"),
+                              "The time series and transect profile graphs allow detailed examination of one parameter at one site at a time. Select (and change) either or both here and choices will apply in the tabs for both graphic types.",
+                              placement = "right"
+                          )
+                      ),
                       selectInput("selected_site.veg", "Select Site:", 
                                   choices = NULL),
                       selectInput("selected_column.veg", "Select Column:", 
@@ -165,7 +197,7 @@ ui <- page_navbar(
                           card(
                               layout_columns(
                                   col_widths = c(10, 2),
-                                  checkboxGroupInput("selected_plots.veg", "Select Plot ID(s):",
+                                  checkboxGroupInput("selected_plots.veg", "Included vegetation plots:",
                                                      choices = NULL,
                                                      inline = TRUE),
                                   actionButton("uncheck_all.veg", "Uncheck All", 
