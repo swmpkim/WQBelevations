@@ -9,7 +9,6 @@ library(ggplot2)
 library(naniar)
 library(khroma)
 library(plotly)
-# library(DT)
 library(reactable)
 library(skimr)
 
@@ -35,31 +34,31 @@ sampling_summary_desc2 <- HTML(
 
 time_series_desc1 <- "See how a variable changes over time at a site. In the sidebar, choose your site and any numeric variable from your file."
 time_series_desc2 <- HTML(
-    "<p>x-axis: date</p>
-    <p>y-axis: the selected variable's value</p>
-    <p>points: one for each vegetation plot on each date, showing the variable's value</p>
-    <p>lines: one for each vegetation plot, showing the variable through time</p>
-    <p>panels: each panel represents a transect, and contains all vegetation plots in that transect</p>
-    <p>selections: vegetation plots can be removed and added using the checkboxes, if you want to focus on one or a few.</p>"
+    "<p><strong>x-axis:</strong> date</p>
+    <p><strong>y-axis:</strong> the selected variable's value</p>
+    <p><strong>points:</strong> one for each vegetation plot on each date, showing the variable's value</p>
+    <p><strong>lines:</strong> one for each vegetation plot, showing the variable through time</p>
+    <p><strong>panels:</strong> each panel represents a transect, and contains all vegetation plots in that transect</p>
+    <p><strong>selections:</strong> vegetation plots can be removed and added using the checkboxes, if you want to focus on one or a few.</p>"
 )
 
 transect_profiles_desc1 <- "See how a variable changes along a cross-section of your transect. In the sidebar, choose your site and any numeric variable from your file."
 transect_profiles_desc2 <- HTML(
-    "<p>x-axis: vegetation plot (numerically ordered; presumably either water-to-upland or vice versa)</p>
-    <p>y-axis: the selected variable's value</p>
-    <p>points: one for each vegetation plot on each date, showing the variable's value</p>
-    <p>lines: one for each year</p>
-    <p>panels: each panel represents a transect, and contains all vegetation plots in that transect</p>
-    <p>selections: years can be removed and added using the checkboxes, if you want to focus on one or a few.</p>"
+    "<p><strong>x-axis:</strong> vegetation plot (numerically ordered; presumably either water-to-upland or vice versa)</p>
+    <p><strong>y-axis:</strong> the selected variable's value</p>
+    <p><strong>points:</strong> one for each vegetation plot on each date, showing the variable's value</p>
+    <p><strong>lines:</strong> one for each year</p>
+    <p><strong>panels:</strong> each panel represents a transect, and contains all vegetation plots in that transect</p>
+    <p><strong>selections:</strong> years can be removed and added using the checkboxes, if you want to focus on one or a few.</p>"
 )
 
 correlation_scatterplots_desc1 <- "Explore relationships between variables, across all sites. This graph only updates when you click the 'Use these choices' button. This is the only graph that is not interactive."
 correlation_scatterplots_desc2 <- HTML(
     "<p>You choose the variables to display on each axis.</p>
-    <p>points: one for each vegetation plot on each date</p>
-    <p>shape: represents site - are there differences in the relationship between sites?</p>
-    <p>color: represents missing vs. non-missing values. If a 'missing' colored point is near the origin, it is missing for both variables. If a value is missing for only one of the two variables, it will be near 0 for the variable that is missing but at the appropriate value for the axis where a variable is present. e.g., if a missing value is placed at 80 along the x-axis, and is near the axis, the y-variable was not measured (and is presumably 0, unless it was truly missing data).</p>
-    <p>line: if selected, a linear regression line is added to the graph.</p>"
+    <p><strong>points:</strong> one for each vegetation plot on each date</p>
+    <p><strong>shape:</strong> represents site - are there differences in the relationship between sites?</p>
+    <p><strong>color:</strong> represents missing vs. non-missing values. If a 'missing' colored point is near the origin, it is missing for both variables. If a value is missing for only one of the two variables, it will be near 0 for the variable that is missing but at the appropriate value for the axis where a variable is present. e.g., if a missing value is placed at 80 along the x-axis, and is near the axis, the y-variable was not measured (and is presumably 0, unless it was truly missing data).</p>
+    <p><strong>line:</strong> if selected, a linear regression line is added to the graph.</p>"
 )
 
 table_interactivity_desc <- "This table is interactive. Columns can be sorted by clicking on their name or filtered by typing into the box below the name."
@@ -150,7 +149,6 @@ ui <- page_navbar(
                       htmltools::tags$small(
                           data_preview_desc1,
                           table_interactivity_desc,
-                          # "This table reflects the input data. The table is interactive. Columns can be sorted by clicking on their name, or filtered by typing into the box below the name.",
                           actionLink("data_preview_info", bsicons::bs_icon("info-circle"))
                           ),
                       reactableOutput("dt.veg")
@@ -161,7 +159,6 @@ ui <- page_navbar(
                       htmltools::tags$small(
                           column_summary_desc1,
                           table_interactivity_desc,
-                          # "This table provides information about each column in the data. The table is interactive. Columns can be sorted by clicking on their name, or filtered by typing into the box below the name.",
                           actionLink("column_summary_info", bsicons::bs_icon("info-circle"))
                           ),
                       reactableOutput("dt.veg.skimr")
@@ -172,7 +169,6 @@ ui <- page_navbar(
                       htmltools::tags$small(
                           sampling_summary_desc1,
                           table_interactivity_desc,
-                          # "This table is interactive. Columns can be sorted by clicking on their name, or filtered by typing into the box below the name. Rows highlighted in orange represent sampling events where no Cover readings were recorded.",
                           actionLink("sampling_summary_info", bsicons::bs_icon("info-circle"))
                           ),
                       reactableOutput("dt.veg_samples")
@@ -267,9 +263,14 @@ ui <- page_navbar(
                       )
                   )
               ) # end navset_tab
-    ) # end nav_panel
-    
-
+    ), # end nav_panel
+ 
+    nav_spacer(),
+    nav_item(tags$a(shiny::icon("github"), 
+                    "Source Code", 
+                    href = "https://github.com/swmpkim/WQBelevations/blob/main/app_vegOnly.R", 
+                    target = "_blank")
+    )
 ) # end UI
 
 # Server ----

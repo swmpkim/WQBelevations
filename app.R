@@ -6,10 +6,72 @@ library(ggplot2)
 library(naniar)
 library(khroma)
 library(plotly)
-# library(DT)
 library(reactable)
 library(skimr)
 
+# description text ----
+# store as variables so the wording can be used in multiple places  
+data_preview_desc1 <- "View, sort, filter, and search the raw data in the 'Cover' worksheet of your file. This table is laid out exactly the same as your original spreadsheet." 
+data_preview_desc2 <- HTML(
+    "<p>Columns can be sorted by clicking on their name, or filtered by typing into the box below the name.</p>
+    <p>You probably only need this table if you see anything unexpected in your data via the other tables and graphs. Search for the values here without having to return to your original spreadsheet. Any data updates however will need to be made in the original spreadsheet.</p>"
+)
+
+column_summary_desc1 <- "This table shows you how R 'sees' your data. This table is good to look through to make sure values in your columns align with your expectations (e.g. you do not have any vegetation cover values of 500)."
+column_summary_desc2 <- HTML(
+    "<p>The table contains one row for each column of the data. It shows you what each column type is and summarizes the values in the column. Note, empty columns are typically seen as 'logical' (true or false). Every column type displays information about how many cells are full and empty, and what the completeness rate is (number of non-empty cells divided by number of rows).</p>
+    <p>For character columns, you see how many unique entries exist. For numeric columns, you see numeric summaries like the min, mean, median, and max.</p>"
+)
+
+sampling_summary_desc1 <- "This table provides a summary of sampling events and flags any vegetation plot-date combinations where there is no vegetation cover recorded."
+sampling_summary_desc2 <- HTML(
+    "<p>For each vegetation plot on each date, true or false is assigned to denote whether each of cover, height, and density were collected. If cover has a 'false' value, the row is orange to draw your attention.</p>
+    <p>Rows are initially shown at only the site/date level, and can be expanded all the way down to vegetation plot level so you can find which row is causing the flagging. Any issues you find need to be addressed in the data file."
+)
+
+time_series_desc1 <- "See how a variable changes over time at a site. In the sidebar, choose your site and any numeric variable from your file."
+time_series_desc2 <- HTML(
+    "<p><strong>x-axis:</strong> date</p>
+    <p><strong>y-axis:</strong> the selected variable's value</p>
+    <p><strong>points:</strong> one for each vegetation plot on each date, showing the variable's value</p>
+    <p><strong>lines:</strong> one for each vegetation plot, showing the variable through time</p>
+    <p><strong>panels:</strong> each panel represents a transect, and contains all vegetation plots in that transect</p>
+    <p><strong>selections:</strong> vegetation plots can be removed and added using the checkboxes, if you want to focus on one or a few.</p>"
+)
+
+transect_profiles_desc1 <- "See how a variable changes along a cross-section of your transect. In the sidebar, choose your site and any numeric variable from your file."
+transect_profiles_desc2 <- HTML(
+    "<p><strong>x-axis:</strong> vegetation plot (numerically ordered; presumably either water-to-upland or vice versa)</p>
+    <p><strong>y-axis:</strong> the selected variable's value</p>
+    <p><strong>points:</strong> one for each vegetation plot on each date, showing the variable's value</p>
+    <p><strong>lines:</strong> one for each year</p>
+    <p><strong>panels:</strong> each panel represents a transect, and contains all vegetation plots in that transect</p>
+    <p><strong>selections:</strong> years can be removed and added using the checkboxes, if you want to focus on one or a few.</p>"
+)
+transect_profiles_combined_desc <- ("In the combined window, there is still one line per year for elevation. Points now represent vegetation data. Shape represents the species or group, and size of the point represents the cover value (i.e. very small = low cover; large = high cover).")
+
+elevation_histograms_desc1 <- "See the distribution of elevation readings in your data file and find any anomalously high values that might indicate a typo in data entry."
+elevation_histograms_desc2 <- HTML(
+    "<p><strong>Mean plot elevation:</strong> Mean elevation by plot on each date, as calculated by app. Look for any anomalous mean values.</p>
+    <p><strong>Stdev by plot:</strong> Standard deviation of individual measurements within each plot on each date. If you notice anomalously high values, hover over the bar to see what the value is. Then you can go to the 'data preview' tab and search in the 'elev_sd' colum to find the plot, and look at the individual elevation readings.</p>
+    <p><strong>All elevation readings:</strong> Each individual elevation reading in the file. Look for anomalous individual readings, and hover over the bar to see the values.</p>"
+)
+
+correlation_scatterplots_desc1 <- "Explore relationships between variables, across all sites. This graph only updates when you click the 'Use these choices' button. This is the only graph that is not interactive."
+correlation_scatterplots_desc2 <- HTML(
+    "<p>You choose the variables to display on each axis.</p>
+    <p><strong>points:</strong> one for each vegetation plot on each date</p>
+    <p><strong>shape:</strong> represents site - are there differences in the relationship between sites?</p>
+    <p><strong>color:</strong> represents missing vs. non-missing values. If a 'missing' colored point is near the origin, it is missing for both variables. If a value is missing for only one of the two variables, it will be near 0 for the variable that is missing but at the appropriate value for the axis where a variable is present. e.g., if a missing value is placed at 80 along the x-axis, and is near the axis, the y-variable was not measured (and is presumably 0, unless it was truly missing data).</p>
+    <p><strong>line:</strong> if selected, a linear regression line is added to the graph.</p>"
+)
+
+table_interactivity_desc <- "This table is interactive. Columns can be sorted by clicking on their name or filtered by typing into the box below the name."
+
+time_series_and_transect_profile_desc <- HTML(
+    "<p>The time series and transect profile graphs allow detailed examination of one parameter at one site at a time. Select (and change) either or both here and choices will apply in the tabs for both graphic types.</p> 
+    <p>Only Site can be updated in the Elevation page, because elevation is the only parameter option.</p>"
+)
 
 # UI ----
 ui <- page_navbar(
@@ -35,10 +97,26 @@ ui <- page_navbar(
                   multiple = FALSE,
                   accept = ".csv"),
         # column selection for elevation file
-        selectInput("elevColSel", label = "Which column(s) represent elevation measurements?",
+        selectInput("elevColSel", 
+                    span(
+                        tags$small("Which column(s) represent elevation measurements?"),
+                        tooltip(
+                            bsicons::bs_icon("info-circle"),
+                            "Select the column or columns that contain elevation readings.",
+                            placement = "right"
+                        )
+                    ),
                     choices = NULL,
                     multiple = TRUE),
-        selectInput("elevAvgSel", label = "Is there a column representing the average of elevation measurements?",
+        selectInput("elevAvgSel", 
+                    span(
+                        tags$small("Is there a column representing the average of elevation measurements?"),
+                        tooltip(
+                            bsicons::bs_icon("info-circle"),
+                            "If you calcluated the average elevation for your plots in your spreadsheet, select that column here. It will be placed next to the app's calculated mean column so you can check for any errors.",
+                            placement = "right"
+                        )
+                    ),
                     choices = NULL,
                     multiple = FALSE),
         # veg data file
@@ -55,6 +133,61 @@ ui <- page_navbar(
                   accept = ".xlsx")
     ),  # end sidebar
     
+    # About panel ----
+    nav_panel("About",
+              card(
+                  card_header("About this app"),
+                  p("This application allows users to explore elevation data at vegetation monitoring sites , vegetation data when it is in the format provided by the Namaste project, and the combination of the two datasets together."),
+                  p("Most pieces of this app are interactive. Tables can be searched and sorted; graphs can have features added or removed; and hovering over a point on a graph will show that point's values."),
+                  p("Information icons (", bsicons::bs_icon("info-circle"), ") are throughout the app to provide more details about specific features. In sidebars you generally hover to see the information, and in the main sections of content you need to click on them."),
+                  
+                  h4("Importing your data"),
+                  tags$ol(
+                      tags$li(strong("Upload your elevation data file"), "using the sidebar. This information will not be retained by the app once you close the session."),
+                      tags$li(strong("Choose elevation columns"), "using the sidebar. The identified columns will be renamed, and a mean for each plot on each date will be calculated. If a column is identified as representing the average as calculated in the spreadsheet, that column will be moved next to the app's calculated mean for easy comparison. This information will not be retained by the app once you close the session."),
+                      tags$li(strong("Upload your vegetation data file"), "using the sidebar. This information will not be retained by the app once you close the session."),
+                      tags$li(strong("Collapse the sidebar"), "using the toggle arrow in the upper right corner of the sidebar. All sidebars can be toggled in this way, to allow more space for tables and graphs once choices are made, but also allow you to see and modify your previous choices."),
+                  ),
+                  
+                  h4("Pages in top navigation bar"),
+                  p("and some notes on what is needed in the files"),
+                  tags$ol(
+                      tags$li(strong("Elevation:"), "This app was developed using Waquoit Bay NERR's elevation data file, so other files that may be used must be csv files and in the same format as Waquoit Bay's."),
+                      tags$li(strong("Vegetation"), "The vegetation file should be an Excel file as produced from the Namaste project."),
+                      tags$li(strong("Combined:"), " In order to explore elevation and vegetation data for a site, the SiteID, TransectID, and PlotID names ", strong("MUST"), " be the same in both files."),
+                      
+                  ),
+                  
+                  h4("Tabs within each page"),
+                  tags$ol(
+                      tags$li(
+                          span(strong("See tabular summaries"), " of your data by selecting 'Tables' from the navigation bar at the top of the app."),
+                          tags$ol(
+                              style = "list-style-type: lower-alpha; margin-top: 8px;",
+                              tags$li(em(strong("Data preview:")), " ", data_preview_desc1),
+                              tags$li(em(strong("Column summary:")), " ", column_summary_desc1),
+                              tags$li(em(strong("Sampling summary:")), " ", sampling_summary_desc1)
+                          )
+                      ),
+                      tags$li(
+                          span(strong("Explore graphs"), " of your data by selecting 'Graphs' from the navigation bar at the top of the app."),
+                          tags$ol(
+                              style = "list-style-type: lower-alpha; margin-top: 8px;",
+                              tags$li(em(strong("Time series:")), " ", time_series_desc1),
+                              tags$li(em(strong("Transect Profiles:")), " ", transect_profiles_desc1),
+                              tags$li(em(strong("Correlation Scatterplots:")), " ", correlation_scatterplots_desc1)
+                          )
+                      )
+                      
+                  ),
+                  hr(),
+                  p("This app was developed in support of the National Estuarine Research Reserve System, a partnership between the National Oceanic and Atmospheric Administration and coastal states. However, it is not an official NERRS or CDMO tool, and is available as a courtesy."),
+                  p("Funding was provided by the NERRS Science Collaborative under the Namaste project. For more information on Namaste, see our ", tags$a("Marsh Response to Sea Level Rise", href = "https://www.nerra.org/science-tools/marsh-response-to-sea-level-rise/", target = "_blank"), "page. For more information on the NERRS Science Collaborative, see ", tags$a("the Science Collaborative", href = "https://https://nerrssciencecollaborative.org/", target = "_blank"), " page."),
+                  p("Developed by ", tags$a("Catbird Stats, LLC", href = "https://www.catbirdstats.com", target = "_blank"), ". For questions about this app, please contact ", tags$a("kim@catbirdstats.com", href = "mailto:kim@catbirdstats.com"), ".")
+              )
+    ),
+    
+    
     # Elevation data panel ----
     nav_panel("Elevations",
               layout_sidebar(
@@ -64,27 +197,40 @@ ui <- page_navbar(
                           h5("Options for time series and transect profile graphics"),
                           tooltip(
                               bsicons::bs_icon("info-circle"),
-                              "The time series and transect profile graphs allow detailed examination of one parameter at one site at a time. Select (and change) either or both here and choices will apply in the tabs for both graphic types.",
+                              time_series_and_transect_profile_desc,
                               placement = "right"
                           )
                       ),
-                      selectInput("selected_site", "Select Site:", 
+                      selectInput("selected_site", 
+                                  htmltools::tags$small("Select Site:"), 
                                   choices = NULL)
                   ),
               navset_card_tab(
                   nav_panel(
                       title = "Elevation data preview",
-                      htmltools::tags$small("This table reflects the input data. The table is interactive. Columns can be sorted by clicking on their name, or filtered by typing into the box below the name."),
+                      htmltools::tags$small(
+                          data_preview_desc1,
+                          table_interactivity_desc,
+                          actionLink("data_preview_info", bsicons::bs_icon("info-circle"))
+                      ),
                       reactableOutput("dt.elevs")
                   ),
                   nav_panel(
                       title = "Elevation column summary",
-                      htmltools::tags$small("This table provides information about each column in the data. The  table is interactive. Columns can be sorted by clicking on their name, or filtered by typing into the box below the name."),
+                      htmltools::tags$small(
+                          column_summary_desc1,
+                          table_interactivity_desc,
+                          actionLink("column_summary_info", bsicons::bs_icon("info-circle"))
+                      ),
                       reactableOutput("dt.elevs.skimr")
                   ),
                   nav_panel(
                       title = "Elevation histograms",
                       card(
+                          htmltools::tags$small(
+                              elevation_histograms_desc1,
+                              actionLink("elevation_histograms_info", bsicons::bs_icon("info-circle"))
+                          ),
                           full_screen = TRUE,  # Optional fullscreen card
                           div(
                               class = "container",  # Bootstrap container for the grid
@@ -102,6 +248,10 @@ ui <- page_navbar(
                   nav_panel(
                       title = "Elevation time series",
                       card(
+                          htmltools::tags$small(
+                              time_series_desc1,
+                              actionLink("time_series_info", bsicons::bs_icon("info-circle"))
+                          ),
                           full_screen = TRUE,
                           layout_columns(
                               col_widths = c(3, 9),
@@ -126,6 +276,10 @@ ui <- page_navbar(
                   nav_panel(
                       title = "Elevation Transect Profiles",
                       card(
+                          htmltools::tags$small(
+                              transect_profiles_desc1,
+                              actionLink("transect_profiles_info", bsicons::bs_icon("info-circle"))
+                          ),
                           full_screen = TRUE,
                           layout_columns(
                               col_widths = c(3, 9),
@@ -160,13 +314,15 @@ ui <- page_navbar(
                           h5("Options for time series and transect profile graphics"),
                           tooltip(
                               bsicons::bs_icon("info-circle"),
-                              "The time series and transect profile graphs allow detailed examination of one parameter at one site at a time. Select (and change) either or both here and choices will apply in the tabs for both graphic types.",
+                              time_series_and_transect_profile_desc,
                               placement = "right"
                           )
                       ),
-                      selectInput("selected_site.veg", "Select Site:", 
+                      selectInput("selected_site.veg", 
+                                  htmltools::tags$small("Select Site:"), 
                                   choices = NULL),
-                      selectInput("selected_column.veg", "Select Column:", 
+                      selectInput("selected_column.veg", 
+                                  htmltools::tags$small("Select Variable:"), 
                                   choices = NULL)
                   ),
               
@@ -174,25 +330,40 @@ ui <- page_navbar(
                   
                   nav_panel(
                       title = "Vegetation data preview",
-                      htmltools::tags$small("This table reflects the input data. The table is interactive. Columns can be sorted by clicking on their name, or filtered by typing into the box below the name."),
+                      htmltools::tags$small(
+                          data_preview_desc1,
+                          table_interactivity_desc,
+                          actionLink("data_preview_info", bsicons::bs_icon("info-circle"))
+                      ),
                       reactableOutput("dt.veg")
                   ),
                   
                   nav_panel(
                       title = "Vegetation column summary",
-                      htmltools::tags$small("This table provides information about each column in the data. The table is interactive. Columns can be sorted by clicking on their name, or filtered by typing into the box below the name."),
+                      htmltools::tags$small(
+                          column_summary_desc1,
+                          table_interactivity_desc,
+                          actionLink("column_summary_info", bsicons::bs_icon("info-circle"))
+                      ),
                       reactableOutput("dt.veg.skimr")
                   ),
                   
                   nav_panel(
                       title = "Vegetation sampling summary",
-                      htmltools::tags$small("This table is interactive. Columns can be sorted by clicking on their name, or filtered by typing into the box below the name. Rows highlighted in orange represent sampling events where no Cover readings were recorded."),
+                      htmltools::tags$small(
+                          sampling_summary_desc1,
+                          actionLink("sampling_summary_info", bsicons::bs_icon("info-circle"))
+                      ),
                       reactableOutput("dt.veg_samples")
                   ),
                   
                   nav_panel(
                       title = "Vegetation time series",
                       card(
+                          htmltools::tags$small(
+                              time_series_desc1,
+                              actionLink("time_series_info", bsicons::bs_icon("info-circle"))
+                          ),
                           full_screen = TRUE,
                           card(
                               layout_columns(
@@ -213,6 +384,10 @@ ui <- page_navbar(
                       card(
                           full_screen = TRUE,
                           card(
+                              htmltools::tags$small(
+                                  transect_profiles_desc1,
+                                  actionLink("transect_profiles_info", bsicons::bs_icon("info-circle"))
+                              ),
                               layout_columns(
                                   col_widths = c(10, 2),
                                   checkboxGroupInput("selected_years.veg", "Select Year(s):",
@@ -235,9 +410,13 @@ ui <- page_navbar(
               layout_sidebar(
                   sidebar = sidebar(
                       title = "Choices for Time Series and Transect Profile tabs",
-                      selectInput("selected_site.comb", "Select Site:", 
+                      selectInput("selected_site.comb", 
+                                  htmltools::tags$small("Select Site:"), 
                                   choices = NULL),
-                      selectInput("selected_cols.comb", "Select focal columns from veg data:",
+                      selectInput("selected_cols.comb", 
+                                  htmltools::tags$small("Select parameter(s) from veg data:",
+                                                        tooltip(bsicons::bs_icon("info-circle"),
+                                                                "Multiple columns can be selected for comparison with each other and with elevation data.")),
                                   choices = NULL,
                                   multiple = TRUE)
                   ),
@@ -246,23 +425,31 @@ ui <- page_navbar(
                       
                       nav_panel(
                           title = "Combined Data preview",
-                          htmltools::tags$small("This table is interactive. Columns can be sorted by clicking on their name, or filtered by typing into the box below the name."),
+                          htmltools::tags$small(
+                              data_preview_desc1,
+                              table_interactivity_desc,
+                              actionLink("data_preview_info", bsicons::bs_icon("info-circle"))
+                          ),
                           reactableOutput("dt.comb")
                       ),
                       
                       nav_panel(
                           title = "Combined time series",
                           card(
+                              htmltools::tags$small(
+                                  time_series_desc1,
+                                  actionLink("time_series_info", bsicons::bs_icon("info-circle"))
+                              ),
                               full_screen = TRUE,
                               fill = FALSE,
-                              p("Plot selection option is below the graph panels."),
+                              htmltools::tags$small("Vegetation plot selection option is below the graph panels."),
                               
                               plotlyOutput("p_combTimeSeries",
                                            height = "600px"),
                               card(
                                   layout_columns(
                                       col_widths = c(10, 2),
-                                      checkboxGroupInput("selected_plots.comb", "Select Plot ID(s):",
+                                      checkboxGroupInput("selected_plots.comb", "Included vegetation plots:",
                                                          choices = NULL,
                                                          inline = TRUE),
                                       actionButton("uncheck_all.comb", "Uncheck All", 
@@ -275,9 +462,13 @@ ui <- page_navbar(
                       nav_panel(
                           title = "Combined Transect Profiles",
                           card(
+                              htmltools::tags$small(
+                                  transect_profiles_desc1,
+                                  actionLink("transect_profiles_info2", bsicons::bs_icon("info-circle"))
+                              ),
                               full_screen = TRUE,
                               fill = FALSE,
-                              p("Year selection option is below the graph panels."),
+                              htmltools::tags$small("Year selection option is below the graph panels."),
                               plotlyOutput("p_combTransectProfile",
                                            height = "600px"),
                               card(
@@ -296,6 +487,10 @@ ui <- page_navbar(
                       nav_panel(
                           title = "Correlation Scatterplots",
                           card(
+                              htmltools::tags$small(
+                                  correlation_scatterplots_desc1,
+                                  actionLink("correlation_scatterplots_info", bsicons::bs_icon("info-circle"))
+                              ),
                               full_screen = TRUE,
                               fill = TRUE,
                               layout_columns(
@@ -1242,6 +1437,90 @@ server <- function(input, output, session){
             
             paste0("Spearman: ", round(corr.spear, 2))
             
+        })
+        
+        
+        # Modals ----
+        # for detailed descriptions of everything to be pop-ups
+        observeEvent(input$data_preview_info, {
+            showModal(modalDialog(
+                title = "Data Preview Table",
+                data_preview_desc2,
+                footer = modalButton("Close"),
+                easyClose = TRUE,
+                size = "m"
+            ))
+        })
+        
+        observeEvent(input$column_summary_info, {
+            showModal(modalDialog(
+                title = "Column Summary Table",
+                column_summary_desc2,
+                footer = modalButton("Close"),
+                easyClose = TRUE,
+                size = "m"
+            ))
+        })
+        
+        observeEvent(input$sampling_summary_info, {
+            showModal(modalDialog(
+                title = "Sampling Summary Table",
+                sampling_summary_desc2,
+                footer = modalButton("Close"),
+                easyClose = TRUE,
+                size = "m"
+            ))
+        })
+        
+        observeEvent(input$time_series_info, {
+            showModal(modalDialog(
+                title = "Time Series Graph",
+                time_series_desc2,
+                footer = modalButton("Close"),
+                easyClose = TRUE,
+                size = "m"
+            ))
+        })
+        
+        observeEvent(input$transect_profiles_info, {
+            showModal(modalDialog(
+                title = "Transect Profile Graph",
+                transect_profiles_desc2,
+                footer = modalButton("Close"),
+                easyClose = TRUE,
+                size = "m"
+            ))
+        })
+        
+        observeEvent(input$transect_profiles_info2, {
+            showModal(modalDialog(
+                title = "Transect Profile Graph",
+                transect_profiles_desc2,
+                transect_profiles_combined_desc,
+                footer = modalButton("Close"),
+                easyClose = TRUE,
+                size = "m"
+            ))
+        })
+        
+        observeEvent(input$elevation_histograms_info, {
+            showModal(modalDialog(
+                title = "Elevation histograms",
+                elevation_histograms_desc2,
+                footer = modalButton("Close"),
+                easyClose = TRUE,
+                size = "m"
+            ))
+        })
+        
+        observeEvent(input$correlation_scatterplots_info, {
+            showModal(modalDialog(
+                title = "Correlation Scatterplots",
+                correlation_scatterplots_desc2,
+                footer = modalButton("Close"),
+                easyClose = TRUE,
+                size = "m"
+            ))
         })
 
 }  # end server function
