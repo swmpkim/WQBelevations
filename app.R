@@ -90,7 +90,8 @@ ui <- page_navbar(
                       "Upload elevation file", 
                       tooltip(
                           bsicons::bs_icon("info-circle"),
-                          "The file must be a csv file following Waquoit Bay NERR's formatting.",
+                          HTML("<p>The file must be a csv file following Waquoit Bay NERR's formatting - one row per measurement date with a column for each measurement within the plot (e.g. each corner).</p> 
+                               <p>Elevation measurement columns can have any name. The following columns are required: Year, Month, Day, SiteID, TransectID, PlotID.</p>"),
                           placement = "right"
                       )
                   ),  
