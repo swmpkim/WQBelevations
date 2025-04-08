@@ -181,8 +181,8 @@ ui <- page_navbar(
                       
                   ),
                   hr(),
-                  p("This app was developed in support of the National Estuarine Research Reserve System, a partnership between the National Oceanic and Atmospheric Administration and coastal states. However, it is not an official NERRS or CDMO tool, and is available as a courtesy."),
-                  p("Funding was provided by the NERRS Science Collaborative under the Namaste project. For more information on Namaste, see our ", tags$a("Marsh Response to Sea Level Rise", href = "https://www.nerra.org/science-tools/marsh-response-to-sea-level-rise/", target = "_blank"), "page. For more information on the NERRS Science Collaborative, see ", tags$a("the Science Collaborative", href = "https://https://nerrssciencecollaborative.org/", target = "_blank"), " page."),
+                  p("This app was developed in support of the National Estuarine Research Reserve System (NERRS), a partnership program between the National Oceanic and Atmospheric Administration and coastal states. However, it is not an official NERRS or NERRS Centralized Data Management Office tool, and is available as a courtesy."),
+                  p("Funding was provided by the NERRS Science Collaborative under the ", tags$a("Namaste project", href = "https://nerrssciencecollaborative.org/project/Peter20", target = "_blank"), ". For more information on Namaste, see our ", tags$a("Marsh Response to Sea Level Rise", href = "https://www.nerra.org/science-tools/marsh-response-to-sea-level-rise/", target = "_blank"), "page. For more information on the NERRS Science Collaborative, see ", tags$a("the Science Collaborative", href = "https://nerrssciencecollaborative.org/", target = "_blank"), " page."),
                   p("Developed by ", tags$a("Catbird Stats, LLC", href = "https://www.catbirdstats.com", target = "_blank"), ". For questions about this app, please contact ", tags$a("kim@catbirdstats.com", href = "mailto:kim@catbirdstats.com"), ".")
               )
     ),
