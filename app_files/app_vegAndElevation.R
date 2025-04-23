@@ -74,14 +74,8 @@ time_series_and_transect_profile_desc <- HTML(
 )
 
 # UI ----
-ui <- page_navbar(
-    title = "WQB Elevations App",
-    theme = bs_theme(version = 5),
-    bg = "#477FB0",
-    inverse = TRUE,
-    underline = TRUE,
-    
-    # CSS for styling - make shiny validation errors red
+ui <- tagList(
+    # Global head elements
     tags$head(
         tags$style(HTML("
       .shiny-output-error-validation {
@@ -90,6 +84,14 @@ ui <- page_navbar(
       }
     "))
     ),
+    
+    
+    page_navbar(
+    title = "WQB Elevations App",
+    theme = bs_theme(version = 5),
+    bg = "#477FB0",
+    inverse = TRUE,
+    underline = TRUE,
     
     # Sidebar - read in data files and control options
     sidebar = sidebar(
@@ -542,6 +544,7 @@ ui <- page_navbar(
                     href = "https://github.com/swmpkim/WQBelevations", 
                     target = "_blank")
              )
+    ) # end page_navbar
 ) # end UI
 
 # Server ----
