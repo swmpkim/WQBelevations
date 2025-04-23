@@ -81,6 +81,16 @@ ui <- page_navbar(
     inverse = TRUE,
     underline = TRUE,
     
+    # CSS for styling - make shiny validation errors red
+    tags$head(
+        tags$style(HTML("
+      .shiny-output-error-validation {
+        color: #9370DB;
+        font-weight: bold;
+      }
+    "))
+    ),
+    
     # Sidebar - read in data files and control options
     sidebar = sidebar(
         title = "File Inputs",
@@ -597,8 +607,23 @@ server <- function(input, output, session){
     
     comb <- reactive({
         req(veg(), elev_renamed())
-        full_join(veg(), elev_renamed(),
+        
+        validate(
+            need(
+                try(
+                    full_join(veg(), elev_renamed(),
+                              by = c("Year", "PlotIdFull", "SiteID", "TransectID", "PlotID"))
+                ), 
+                "Data sets could not be joined. Please make sure SiteID, TransectID, and PlotID match exactly in the input files."
+            ) # end 'need'
+        ) # end 'validate'
+        
+        
+        # if that worked, actually join the data frames
+        df <- full_join(veg(), elev_renamed(),
                   by = c("Year", "PlotIdFull", "SiteID", "TransectID", "PlotID"))
+        
+        df
     })
     
     # more data framing ----
@@ -657,7 +682,18 @@ server <- function(input, output, session){
     
     # subset combined data frame to focal species + elevations
     comb_subset <- reactive({
+        # if no selection has been made, put up a message about needing at least one
+        validate(
+            need(comb(),
+                "Data sets were not joined"
+            ),
+            need(!is.null(input$selected_cols.comb), 
+                 "Please select at least one column from the veg file, at left."
+            )
+        )
+        
         req(comb(), input$selected_cols.comb)
+        
         comb()  |> 
             dplyr::select(PlotIdFull,
                           SiteID, TransectID, PlotID,
@@ -669,6 +705,7 @@ server <- function(input, output, session){
     # pivot combined
     comb_long <- reactive({
         req(comb_subset())
+        
         comb_subset() |> 
             tidyr::pivot_longer(-(PlotIdFull:Year),
                          names_to = "Measurement",
@@ -1208,6 +1245,7 @@ server <- function(input, output, session){
     # combined elev + veg time series
     output$p_combTimeSeries <- renderPlotly({
         req(comb_long(), input$selected_site.comb, input$selected_plots.comb)
+        
         cols <- khroma::color("batlow")(length(unique(comb_long()$PlotID)))
         names(cols) <- sort(unique(comb_long()$PlotID))
         p <- comb_long() |> 
